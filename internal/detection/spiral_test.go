@@ -274,7 +274,7 @@ func TestTokenize(t *testing.T) {
 		input string
 		want  int // expected number of tokens
 	}{
-		{"normal text", "Hello World, how are you?", 4}, // "hello", "world", "how", "are" — "you" is stripped to empty by punctuation? No, "you?" -> "you" which is 3 chars > 1
+		{"normal text", "Hello World, how are you?", 5}, // "hello", "world", "how", "are", "you" (punctuation stripped, all > 1 char)
 		{"empty", "", 0},
 		{"single char words", "a b c d", 0}, // all single-char, filtered out
 		{"punctuation stripped", "hello! world? foo.", 3},
