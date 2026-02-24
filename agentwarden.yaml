@@ -1,0 +1,134 @@
+# AgentWarden Configuration
+# Docs: https://agentwarden.dev/docs/configuration
+
+server:
+  port: 6777
+  grpc_port: 6778
+  dashboard: true
+  log_level: info              # debug | info | warn | error
+  cors: false
+  fail_mode: closed            # closed = deny on error | open = allow on error
+
+# ─── Storage ───
+storage:
+  driver: sqlite               # sqlite | postgres | clickhouse
+  path: ./agentwarden.db
+  # connection: postgresql://localhost:5432/agentwarden
+  retention: 720h              # 30 days
+  redaction:
+    - pattern: "sk-[a-zA-Z0-9]+"
+      replacement: "[REDACTED_KEY]"
+    - fields: ["request_body.password", "response_body.ssn"]
+
+# ─── Directories ───
+agents_dir: ./agents
+policies_dir: ./policies
+playbooks_dir: ./playbooks
+
+# ─── Policies ───
+policies:
+
+  # Cost circuit breaker (per session)
+  - name: session-budget
+    condition: session.cost > 10.00
+    effect: terminate
+    message: "Session killed: exceeded $10 budget"
+
+  # Cost circuit breaker (per agent per day)
+  - name: daily-agent-budget
+    condition: agent.daily_cost > 100.00
+    effect: terminate
+    message: "Agent daily budget exceeded"
+
+  # Block dangerous database writes
+  - name: no-prod-db-writes
+    condition: >
+      action.type == "db.query"
+      && action.params.query.matches("^(INSERT|UPDATE|DELETE|DROP)")
+      && action.target.contains("production")
+    effect: deny
+    message: "Production database writes are blocked"
+
+  # Rate limiting
+  - name: api-rate-limit
+    condition: session.action_count("api.call", "60s") > 100
+    effect: throttle
+    delay: 5s
+
+  # Human approval for deployments
+  - name: approve-deploys
+    condition: action.name.contains("deploy")
+    effect: approve
+    approvers: [slack:#deployments]
+    timeout: 30m
+    timeout_effect: deny
+
+  # AI-evaluated (semantic safety) — context loaded from POLICY.md
+  # - name: no-data-exfiltration
+  #   type: ai-judge
+  #   context: policies/no-data-exfiltration/POLICY.md
+  #   model: claude-haiku
+  #   effect: deny
+
+# ─── Detection ───
+detection:
+  loop:
+    enabled: true
+    threshold: 5
+    window: 60s
+    action: playbook            # pause | alert | terminate | playbook
+    fallback_action: pause
+    playbook_model: claude-haiku
+
+  cost_anomaly:
+    enabled: true
+    multiplier: 10
+    action: alert
+    fallback_action: alert
+    playbook_model: claude-haiku
+
+  spiral:
+    enabled: true
+    similarity_threshold: 0.9
+    window: 5
+    action: alert
+    fallback_action: alert
+    playbook_model: claude-haiku
+
+# ─── Evolution ───
+evolution:
+  enabled: false               # opt-in
+  model: claude-sonnet-4
+
+  scoring:
+    metrics: [task_completion_rate, error_rate, human_override_rate, cost_per_task]
+    window: 168h               # 7 days
+
+  constraints:
+    - "no new tool permissions without human approval"
+    - "cost_per_task must not increase by more than 20%"
+
+  shadow:
+    required: true
+    min_runs: 50
+    success_threshold: 0.95
+
+  rollback:
+    auto: true
+    trigger: "error_rate increases by 10% within 1h"
+
+  triggers:
+    - type: scheduled
+      cron: "0 2 * * *"
+    - type: metric_threshold
+      condition: task_completion_rate < 0.85
+      cooldown: 24h
+
+# ─── Alerts ───
+alerts:
+  slack:
+    webhook_url: ${SLACK_WEBHOOK_URL}
+    channel: "#agent-alerts"
+  webhook:
+    url: ""
+    secret: ""
