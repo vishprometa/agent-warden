@@ -1,0 +1,21 @@
+apiVersion: v2
+name: agentwarden
+description: Runtime governance proxy for AI agents — Observe. Enforce. Evolve.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/agentwarden/agentwarden
+sources:
+  - https://github.com/agentwarden/agentwarden
+maintainers:
+  - name: AgentWarden
+    url: https://github.com/agentwarden
+keywords:
+  - ai
+  - agent
+  - governance
+  - proxy
+  - llm
+  - observability
+  - policy
+  - cost-tracking
