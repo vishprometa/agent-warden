@@ -27,7 +27,7 @@ data/
 *.db-journal
 *.db-wal
 *.db-shm
-agentwarden
+/agentwarden
 
 # Config with secrets (starter file is fine, user config is not)
 # agentwarden.yaml is intentionally NOT ignored (starter config)

@@ -6,35 +6,38 @@ import (
 
 // Config is the top-level AgentWarden configuration.
 type Config struct {
-	Server    ServerConfig    `yaml:"server"`
-	Upstream  UpstreamConfig  `yaml:"upstream"`
-	Storage   StorageConfig   `yaml:"storage"`
-	Policies  []PolicyConfig  `yaml:"policies"`
-	Detection DetectionConfig `yaml:"detection"`
-	Evolution EvolutionConfig `yaml:"evolution"`
-	Alerts    AlertsConfig    `yaml:"alerts"`
+	Server  ServerConfig  `yaml:"server"`
+	Storage StorageConfig `yaml:"storage"`
+	Policies     []PolicyConfig  `yaml:"policies"`
+	Detection    DetectionConfig `yaml:"detection"`
+	Evolution    EvolutionConfig `yaml:"evolution"`
+	Alerts       AlertsConfig    `yaml:"alerts"`
+	AgentsDir    string          `yaml:"agents_dir"`
+	PoliciesDir  string          `yaml:"policies_dir"`
+	PlaybooksDir string          `yaml:"playbooks_dir"`
 }
 
 type ServerConfig struct {
 	Port      int    `yaml:"port"`
+	GRPCPort  int    `yaml:"grpc_port"`
 	Dashboard bool   `yaml:"dashboard"`
 	LogLevel  string `yaml:"log_level"`
 	CORS      bool   `yaml:"cors"`
-}
-
-type UpstreamConfig struct {
-	Default         string            `yaml:"default"`
-	Providers       map[string]string `yaml:"providers"`
-	PassthroughAuth bool              `yaml:"passthrough_auth"`
-	Timeout         time.Duration     `yaml:"timeout"`
-	Retries         int               `yaml:"retries"`
+	FailMode  string `yaml:"fail_mode"` // "closed" = deny on error, "open" = allow on error
 }
 
 type StorageConfig struct {
-	Driver     string        `yaml:"driver"`
-	Path       string        `yaml:"path"`
-	Connection string        `yaml:"connection"`
-	Retention  time.Duration `yaml:"retention"`
+	Driver     string           `yaml:"driver"`
+	Path       string           `yaml:"path"`
+	Connection string           `yaml:"connection"`
+	Retention  time.Duration    `yaml:"retention"`
+	Redaction  []RedactionRule  `yaml:"redaction"`
+}
+
+type RedactionRule struct {
+	Pattern     string   `yaml:"pattern"`
+	Replacement string   `yaml:"replacement"`
+	Fields      []string `yaml:"fields"`
 }
 
 type PolicyConfig struct {
@@ -46,28 +49,33 @@ type PolicyConfig struct {
 	Delay         time.Duration `yaml:"delay"` // for throttle
 	Prompt        string        `yaml:"prompt"`
 	Model         string        `yaml:"model"`
+	Context       string        `yaml:"context"` // path to POLICY.md file for ai-judge policies
 	Approvers     []string      `yaml:"approvers"`
 	Timeout       time.Duration `yaml:"timeout"`
 	TimeoutEffect string        `yaml:"timeout_effect"`
 }
 
 type DetectionConfig struct {
-	Loop        LoopDetectionConfig    `yaml:"loop"`
-	CostAnomaly CostAnomalyConfig     `yaml:"cost_anomaly"`
-	Spiral      SpiralDetectionConfig  `yaml:"spiral"`
+	Loop        LoopDetectionConfig   `yaml:"loop"`
+	CostAnomaly CostAnomalyConfig    `yaml:"cost_anomaly"`
+	Spiral      SpiralDetectionConfig `yaml:"spiral"`
 }
 
 type LoopDetectionConfig struct {
-	Enabled   bool          `yaml:"enabled"`
-	Threshold int           `yaml:"threshold"`
-	Window    time.Duration `yaml:"window"`
-	Action    string        `yaml:"action"` // pause, alert, terminate
+	Enabled        bool          `yaml:"enabled"`
+	Threshold      int           `yaml:"threshold"`
+	Window         time.Duration `yaml:"window"`
+	Action         string        `yaml:"action"` // pause, alert, terminate, playbook
+	FallbackAction string        `yaml:"fallback_action"`
+	PlaybookModel  string        `yaml:"playbook_model"`
 }
 
 type CostAnomalyConfig struct {
-	Enabled    bool    `yaml:"enabled"`
-	Multiplier float64 `yaml:"multiplier"`
-	Action     string  `yaml:"action"`
+	Enabled        bool    `yaml:"enabled"`
+	Multiplier     float64 `yaml:"multiplier"`
+	Action         string  `yaml:"action"`
+	FallbackAction string  `yaml:"fallback_action"`
+	PlaybookModel  string  `yaml:"playbook_model"`
 }
 
 type SpiralDetectionConfig struct {
@@ -75,15 +83,18 @@ type SpiralDetectionConfig struct {
 	SimilarityThreshold float64 `yaml:"similarity_threshold"`
 	Window              int     `yaml:"window"`
 	Action              string  `yaml:"action"`
+	FallbackAction      string  `yaml:"fallback_action"`
+	PlaybookModel       string  `yaml:"playbook_model"`
 }
 
 type EvolutionConfig struct {
-	Enabled     bool                `yaml:"enabled"`
-	Scoring     ScoringConfig       `yaml:"scoring"`
-	Constraints []string            `yaml:"constraints"`
-	Shadow      ShadowConfig        `yaml:"shadow"`
-	Rollback    RollbackConfig      `yaml:"rollback"`
-	Triggers    []EvolutionTrigger  `yaml:"triggers"`
+	Enabled     bool               `yaml:"enabled"`
+	Model       string             `yaml:"model"`
+	Scoring     ScoringConfig      `yaml:"scoring"`
+	Constraints []string           `yaml:"constraints"`
+	Shadow      ShadowConfig       `yaml:"shadow"`
+	Rollback    RollbackConfig     `yaml:"rollback"`
+	Triggers    []EvolutionTrigger `yaml:"triggers"`
 }
 
 type ScoringConfig struct {
@@ -129,21 +140,15 @@ func DefaultConfig() *Config {
 	return &Config{
 		Server: ServerConfig{
 			Port:      6777,
+			GRPCPort:  6778,
 			Dashboard: true,
 			LogLevel:  "info",
 			CORS:      false,
+			FailMode:  "closed",
 		},
-		Upstream: UpstreamConfig{
-			Default: "https://api.openai.com/v1",
-			Providers: map[string]string{
-				"openai":    "https://api.openai.com/v1",
-				"anthropic": "https://api.anthropic.com/v1",
-				"gemini":    "https://generativelanguage.googleapis.com/v1beta",
-			},
-			PassthroughAuth: true,
-			Timeout:         30 * time.Second,
-			Retries:         2,
-		},
+		AgentsDir:    "./agents",
+		PoliciesDir:  "./policies",
+		PlaybooksDir: "./playbooks",
 		Storage: StorageConfig{
 			Driver:    "sqlite",
 			Path:      "./agentwarden.db",
@@ -167,6 +172,9 @@ func DefaultConfig() *Config {
 				Window:              5,
 				Action:              "alert",
 			},
+		},
+		Evolution: EvolutionConfig{
+			Model: "claude-sonnet-4",
 		},
 	}
 }
