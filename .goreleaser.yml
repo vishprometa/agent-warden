@@ -1,0 +1,78 @@
+version: 2
+
+before:
+  hooks:
+    - cmd: bash -c "cd dashboard && npm ci --no-audit --no-fund && npm run build"
+    - cmd: bash -c "rm -rf internal/dashboard/dist && cp -r dashboard/dist internal/dashboard/dist"
+
+builds:
+  - id: agentwarden
+    main: ./cmd/agentwarden
+    binary: agentwarden
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+      - -X main.commit={{ .ShortCommit }}
+      - -X main.buildDate={{ .Date }}
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+    files:
+      - LICENSE*
+      - README*
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+
+dockers:
+  - image_templates:
+      - "ghcr.io/agentwarden/agentwarden:{{ .Version }}-amd64"
+      - "ghcr.io/agentwarden/agentwarden:latest-amd64"
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--build-arg=VERSION={{ .Version }}"
+      - "--build-arg=COMMIT={{ .ShortCommit }}"
+      - "--build-arg=BUILD_DATE={{ .Date }}"
+    goarch: amd64
+
+  - image_templates:
+      - "ghcr.io/agentwarden/agentwarden:{{ .Version }}-arm64"
+      - "ghcr.io/agentwarden/agentwarden:latest-arm64"
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--build-arg=VERSION={{ .Version }}"
+      - "--build-arg=COMMIT={{ .ShortCommit }}"
+      - "--build-arg=BUILD_DATE={{ .Date }}"
+    goarch: arm64
+
+docker_manifests:
+  - name_template: "ghcr.io/agentwarden/agentwarden:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/agentwarden/agentwarden:{{ .Version }}-amd64"
+      - "ghcr.io/agentwarden/agentwarden:{{ .Version }}-arm64"
+
+  - name_template: "ghcr.io/agentwarden/agentwarden:latest"
+    image_templates:
+      - "ghcr.io/agentwarden/agentwarden:latest-amd64"
+      - "ghcr.io/agentwarden/agentwarden:latest-arm64"

@@ -1,0 +1,44 @@
+# Git
+.git
+.gitignore
+
+# Dependencies
+node_modules
+dashboard/node_modules
+
+# Build artifacts
+bin/
+agentwarden
+
+# Data and config
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# SDKs (not needed in container)
+sdk/
+
+# Documentation and meta
+docs/
+evolution/
+deploy/
+.github/
+*.md
+LICENSE
+
+# IDE and OS
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+test/
+coverage/
+*.test
+*.out

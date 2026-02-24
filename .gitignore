@@ -1,0 +1,53 @@
+# Go build artifacts
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+vendor/
+
+# Go test artifacts
+*.test
+*.out
+coverage/
+coverage.html
+
+# Node / Dashboard
+node_modules/
+dashboard/dist/
+dist/
+
+# Embedded dashboard build (regenerated from dashboard/)
+internal/dashboard/dist/
+
+# Project: data and runtime
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+agentwarden
+
+# Config with secrets (starter file is fine, user config is not)
+# agentwarden.yaml is intentionally NOT ignored (starter config)
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# GoReleaser
+dist/
+
+# Debug
+__debug_bin*

@@ -1,0 +1,13 @@
+services:
+  agentwarden:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "6777:6777"
+    volumes:
+      - ./data:/data
+      - ./agentwarden.yaml:/etc/agentwarden/config.yaml:ro
+    environment:
+      - AGENTWARDEN_CONFIG=/etc/agentwarden/config.yaml
+    restart: unless-stopped

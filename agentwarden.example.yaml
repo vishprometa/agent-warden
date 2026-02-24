@@ -1,0 +1,93 @@
+# AgentWarden Configuration
+# Copy this file to agentwarden.yaml and customize for your environment.
+# Run `agentwarden init` to generate a starter config.
+
+server:
+  port: 6777
+  dashboard: true
+  cors: false        # Enable for development
+  log_level: info    # debug, info, warn, error
+
+# Upstream LLM providers. Requests are routed based on model prefix.
+upstream:
+  default: "https://api.openai.com"
+  routes:
+    - prefix: "gpt-"
+      url: "https://api.openai.com"
+    - prefix: "claude-"
+      url: "https://api.anthropic.com"
+    - prefix: "gemini-"
+      url: "https://generativelanguage.googleapis.com"
+  timeout: 120s
+  max_retries: 2
+
+# Storage for traces, sessions, and audit logs.
+storage:
+  driver: sqlite
+  path: ./data/agentwarden.db
+
+# Governance policies evaluated in order. First deny/terminate wins.
+policies:
+  # Budget limit per session
+  - name: session-budget
+    condition: "session.cost > 5.0"
+    effect: terminate
+    message: "Session cost exceeded $5.00 budget limit"
+
+  # Rate limit: max 100 LLM calls per minute
+  - name: rate-limit
+    condition: "session.action_count > 100"
+    effect: throttle
+    message: "Rate limit: too many actions in session"
+    delay: 5s
+
+  # Block dangerous tool calls
+  - name: block-shell-exec
+    condition: 'action.type == "tool.call" && action.name == "shell_exec"'
+    effect: deny
+    message: "Shell execution is not allowed"
+
+  # Block file writes outside sandbox
+  - name: block-file-write
+    condition: 'action.type == "file.write"'
+    effect: deny
+    message: "File writes require approval"
+
+  # Example: require human approval for database modifications
+  # - name: db-write-approval
+  #   condition: 'action.type == "db.query" && action.name == "write"'
+  #   effect: approve
+  #   message: "Database write requires human approval"
+  #   approvers: ["admin@example.com"]
+
+# Anomaly detection subsystems.
+detection:
+  loop:
+    enabled: true
+    threshold: 5       # Fire after 5 identical actions
+    window: 60s        # Within this time window
+    action: alert      # alert, pause, terminate
+  cost_anomaly:
+    enabled: true
+    multiplier: 3.0    # Fire when cost rate is 3x the baseline
+    baseline_window: 300s
+    action: alert
+  spiral:
+    enabled: true
+    window: 4          # Check last 4 consecutive outputs
+    similarity_threshold: 0.85  # Cosine similarity threshold
+    action: alert
+
+# Alert delivery channels.
+alerts:
+  slack:
+    webhook_url: ""    # Set via env: ${SLACK_WEBHOOK_URL}
+    channel: "#agentwarden-alerts"
+  webhook:
+    url: ""
+    secret: ""         # HMAC-SHA256 signing secret
+
+# Evolution engine (future: auto-tighten policies based on learned patterns).
+evolution:
+  enabled: false
+  learning_rate: 0.1
