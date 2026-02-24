@@ -20,6 +20,18 @@ export type { AgentWardenConfig } from "./client.js";
 // Management API client
 export { ManagementClient } from "./management.js";
 
+// Proxy configuration
+export { createWardenProxy } from "./proxy.js";
+
+// Auto-discovery
+export { discover, autoConnect } from "./discovery.js";
+
+// Session management
+export { WardenSession } from "./session.js";
+
+// Express/Hono middleware
+export { wardenMiddleware } from "./middleware.js";
+
 // All types
 export type {
   // Domain models
@@ -54,6 +66,20 @@ export type {
   ListViolationsResponse,
   StatusResponse,
   HealthResponse,
+
+  // Proxy types
+  WardenProxyOptions,
+  WardenProxy,
+  WardenProxyConfig,
+
+  // Middleware types
+  MiddlewareOptions,
+  MiddlewareRequest,
+  MiddlewareResponse,
+  MiddlewareNext,
+
+  // Session types
+  SessionMetrics,
 } from "./types.js";
 
 // Error class (re-exported as value, not just type)

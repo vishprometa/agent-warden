@@ -56,3 +56,29 @@ declare class URLSearchParams {
   toString(): string;
   forEach(callback: (value: string, key: string) => void): void;
 }
+
+// ---------------------------------------------------------------------------
+// AbortController — available in Node 15+ and all modern browsers
+// ---------------------------------------------------------------------------
+
+interface AbortSignal {
+  readonly aborted: boolean;
+}
+
+declare class AbortController {
+  readonly signal: AbortSignal;
+  abort(): void;
+}
+
+// ---------------------------------------------------------------------------
+// Timer functions — available globally in Node and browsers
+// ---------------------------------------------------------------------------
+
+declare function setTimeout(callback: () => void, ms: number): unknown;
+declare function clearTimeout(id: unknown): void;
+
+// ---------------------------------------------------------------------------
+// process.env — Node.js only, guarded with typeof checks at runtime
+// ---------------------------------------------------------------------------
+
+declare const process: { env: Record<string, string | undefined> } | undefined;

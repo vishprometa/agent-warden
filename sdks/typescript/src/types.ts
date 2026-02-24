@@ -244,6 +244,125 @@ export interface HealthResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Proxy configuration types
+// ---------------------------------------------------------------------------
+
+/**
+ * Options for creating a transparent AgentWarden proxy configuration.
+ */
+export interface WardenProxyOptions {
+  /** Unique identifier for this agent. */
+  agentId: string;
+
+  /**
+   * Base URL of the AgentWarden proxy.
+   * @default "http://localhost:6777"
+   */
+  proxyUrl?: string;
+
+  /** Optional session ID to scope all requests under. */
+  sessionId?: string;
+
+  /** Arbitrary metadata attached to every proxied request. */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Client configuration object that can be spread into any OpenAI-compatible
+ * client constructor for zero-code-change integration.
+ */
+export interface WardenProxyConfig {
+  /** The proxy base URL with `/v1` suffix for OpenAI compatibility. */
+  baseURL: string;
+
+  /** AgentWarden headers injected into every request. */
+  defaultHeaders: Record<string, string>;
+}
+
+/**
+ * A transparent proxy wrapper returned by `createWardenProxy()`.
+ * Provides the raw config plus helper methods for session scoping
+ * and management API access.
+ */
+export interface WardenProxy {
+  /** Spread this into any OpenAI-compatible client constructor. */
+  config: WardenProxyConfig;
+
+  /**
+   * Returns a new `WardenProxy` scoped to a specific session.
+   * @param id - Session ID. If omitted, the proxy auto-creates one.
+   */
+  session(id?: string): WardenProxy;
+
+  /** Returns a `ManagementClient` for the same proxy instance. */
+  management(): import("./management.js").ManagementClient;
+}
+
+/**
+ * Options for the Express/Hono middleware.
+ */
+export interface MiddlewareOptions {
+  /** Unique identifier for this agent. */
+  agentId: string;
+
+  /**
+   * Base URL of the AgentWarden proxy.
+   * @default "http://localhost:6777"
+   */
+  proxyUrl?: string;
+
+  /**
+   * Extract a session ID from the incoming request.
+   * When provided, the returned string is sent as `X-AgentWarden-Session-Id`.
+   */
+  sessionFrom?: (req: MiddlewareRequest) => string | undefined;
+
+  /**
+   * Extract arbitrary metadata from the incoming request.
+   * The returned object is JSON-encoded into `X-AgentWarden-Metadata`.
+   */
+  metadataFrom?: (req: MiddlewareRequest) => Record<string, unknown> | undefined;
+
+  /**
+   * Route patterns to exclude from tracing.
+   * Matched against `req.path` using simple string prefix comparison.
+   */
+  exclude?: string[];
+}
+
+/**
+ * Minimal request interface used by the middleware.
+ * Compatible with Express, Hono, and other Node.js HTTP frameworks.
+ */
+export interface MiddlewareRequest {
+  method: string;
+  path: string;
+  url: string;
+  headers: Record<string, string | string[] | undefined>;
+}
+
+/**
+ * Minimal response interface used by the middleware.
+ * Compatible with Express and similar frameworks.
+ */
+export interface MiddlewareResponse {
+  setHeader(name: string, value: string): void;
+  on(event: string, listener: (...args: unknown[]) => void): void;
+}
+
+/**
+ * Standard Express/Connect-style next function.
+ */
+export type MiddlewareNext = (err?: unknown) => void;
+
+/**
+ * Performance metrics for scoring a session.
+ */
+export interface SessionMetrics {
+  [key: string]: number;
+}
+
+// ---------------------------------------------------------------------------
 // Error types
 // ---------------------------------------------------------------------------
 
