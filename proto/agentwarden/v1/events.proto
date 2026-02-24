@@ -1,0 +1,84 @@
+syntax = "proto3";
+package agentwarden.v1;
+option go_package = "github.com/agentwarden/agentwarden/proto/agentwarden/v1;wardenapi";
+
+// Action types
+// llm.chat, llm.embedding, tool.call, api.request, db.query, file.write, code.exec, mcp.tool, agent.spawn, agent.delegate
+
+message ActionEvent {
+  string session_id = 1;
+  string agent_id = 2;
+  string agent_version = 3;
+  Action action = 4;
+  ActionContext context = 5;
+  map<string, string> metadata = 6;
+}
+
+message Action {
+  string type = 1;     // e.g. "tool.call", "api.request"
+  string name = 2;     // e.g. "github.merge_pr"
+  string params_json = 3;  // JSON-encoded params
+  string target = 4;   // e.g. "github.com/org/repo"
+}
+
+message ActionContext {
+  double session_cost = 1;
+  int32 session_action_count = 2;
+  int32 session_duration_seconds = 3;
+}
+
+message Verdict {
+  string verdict = 1;  // allow, deny, terminate, approve, throttle
+  string trace_id = 2;
+  string policy_name = 3;
+  string message = 4;
+  string approval_id = 5;
+  int32 timeout_seconds = 6;
+  int32 latency_ms = 7;
+  repeated string suggestions = 8;
+}
+
+message SessionStart {
+  string session_id = 1;
+  string agent_id = 2;
+  string agent_version = 3;
+  map<string, string> metadata = 4;
+}
+
+message SessionAck {
+  string session_id = 1;
+  bool ok = 2;
+  string message = 3;
+}
+
+message SessionEnd {
+  string session_id = 1;
+}
+
+message SessionSummary {
+  string session_id = 1;
+  double total_cost = 2;
+  int32 action_count = 3;
+  int32 duration_seconds = 4;
+  string status = 5;
+}
+
+message SessionScore {
+  string session_id = 1;
+  bool task_completed = 2;
+  double quality = 3;
+  map<string, string> metrics = 4;
+}
+
+message Ack {
+  bool ok = 1;
+  string message = 2;
+}
+
+service AgentWardenService {
+  rpc EvaluateAction(ActionEvent) returns (Verdict);
+  rpc StartSession(SessionStart) returns (SessionAck);
+  rpc EndSession(SessionEnd) returns (SessionSummary);
+  rpc ScoreSession(SessionScore) returns (Ack);
+  rpc StreamActions(stream ActionEvent) returns (stream Verdict);
+}
