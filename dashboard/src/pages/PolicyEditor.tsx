@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   Loader2,
   RefreshCw,
@@ -29,9 +29,9 @@ function effectColor(effect: string): string {
 }
 
 /** Simple CEL syntax highlighting */
-function highlightCEL(expr: string): JSX.Element {
+function highlightCEL(expr: string): ReactNode {
   const keywords = ['&&', '||', '!', '==', '!=', '>=', '<=', '>', '<', 'in', 'true', 'false'];
-  const parts: JSX.Element[] = [];
+  const parts: ReactNode[] = [];
   let remaining = expr;
   let key = 0;
 

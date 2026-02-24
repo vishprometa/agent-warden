@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -51,7 +51,7 @@ function versionStatusIcon(status: string) {
   }
 }
 
-function renderDiff(diff: Record<string, any> | undefined): JSX.Element | null {
+function renderDiff(diff: Record<string, any> | undefined): ReactNode {
   if (!diff || Object.keys(diff).length === 0) {
     return <span className="text-xs text-gray-500 italic">No changes from previous version</span>;
   }

@@ -7,8 +7,11 @@ import {
   Bot,
   DollarSign,
   FileCheck,
+  FileEdit,
   ShieldAlert,
   AlertTriangle,
+  PlayCircle,
+  GitBranch,
 } from 'lucide-react';
 
 const navItems = [
@@ -18,6 +21,7 @@ const navItems = [
   { to: '/agents', icon: Bot, label: 'Agents' },
   { to: '/costs', icon: DollarSign, label: 'Costs' },
   { to: '/policies', icon: FileCheck, label: 'Policies' },
+  { to: '/policies/editor', icon: FileEdit, label: 'Policy Editor' },
   { to: '/approvals', icon: ShieldAlert, label: 'Approvals' },
   { to: '/violations', icon: AlertTriangle, label: 'Violations' },
 ];
