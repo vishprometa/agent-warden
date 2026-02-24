@@ -3,7 +3,9 @@ import type {
   Session,
   Agent,
   AgentStats,
+  AgentVersion,
   PolicyConfig,
+  PolicyDryRunResult,
   Approval,
   Violation,
   SystemStats,
@@ -143,4 +145,39 @@ export function getViolations(params?: {
   if (params?.limit) sp.set('limit', String(params.limit));
   const qs = sp.toString();
   return request(`/api/violations${qs ? `?${qs}` : ''}`);
+}
+
+// Policy Dry Run
+export function dryRunPolicy(
+  context: Record<string, any>,
+): Promise<{ results: PolicyDryRunResult[] }> {
+  return request('/api/policies/dry-run', {
+    method: 'POST',
+    body: JSON.stringify(context),
+  });
+}
+
+// Agent Versions (Evolution)
+export function getAgentVersions(
+  agentId: string,
+): Promise<{ versions: AgentVersion[] }> {
+  return request(`/api/agents/${agentId}/versions`);
+}
+
+export function promoteVersion(
+  agentId: string,
+  versionId: string,
+): Promise<{ status: string }> {
+  return request(`/api/agents/${agentId}/versions/${versionId}/promote`, {
+    method: 'POST',
+  });
+}
+
+export function rollbackVersion(
+  agentId: string,
+  versionId: string,
+): Promise<{ status: string }> {
+  return request(`/api/agents/${agentId}/versions/${versionId}/rollback`, {
+    method: 'POST',
+  });
 }

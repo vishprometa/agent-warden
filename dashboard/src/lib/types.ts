@@ -81,3 +81,29 @@ export interface SystemStats {
   total_cost: number;
   traces_per_minute?: number;
 }
+
+export interface AgentVersion {
+  id: string;
+  agent_id: string;
+  version: number;
+  status: 'active' | 'candidate' | 'shadow' | 'retired' | 'rolled_back';
+  config: Record<string, any>;
+  diff_from_prev?: Record<string, any>;
+  shadow_test_results?: {
+    total: number;
+    passed: number;
+    failed: number;
+    details?: Array<{ test: string; result: string; message?: string }>;
+  };
+  created_at: string;
+  promoted_at?: string;
+  rolled_back_at?: string;
+  reason?: string;
+}
+
+export interface PolicyDryRunResult {
+  policy_name: string;
+  effect: string;
+  matched: boolean;
+  message: string;
+}
