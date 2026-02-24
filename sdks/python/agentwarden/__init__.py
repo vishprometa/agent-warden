@@ -1,4 +1,4 @@
-"""AgentWarden Python SDK v2 -- runtime governance for AI agents.
+"""AgentWarden Python SDK -- runtime governance for AI agents.
 
 Session-based governance with HTTP transport (gRPC optional)::
 

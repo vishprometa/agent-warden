@@ -72,7 +72,7 @@ detection:
 		t.Error("Server.CORS = false, want true")
 	}
 
-	// v2 config fields
+	// Event-driven config fields
 	if cfg.Server.GRPCPort != 6778 {
 		t.Errorf("Server.GRPCPort = %d, want 6778", cfg.Server.GRPCPort)
 	}

@@ -1,4 +1,4 @@
-"""CrewAI integration for AgentWarden v2.
+"""CrewAI integration for AgentWarden.
 
 Provides :class:`GovernedCrew` -- a wrapper around CrewAI's Crew class
 that governs crew execution through AgentWarden sessions.

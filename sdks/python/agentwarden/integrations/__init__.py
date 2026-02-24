@@ -1,4 +1,4 @@
-"""Framework integrations for AgentWarden v2.
+"""Framework integrations for AgentWarden.
 
 Each integration module gracefully handles missing dependencies with
 ``try/except ImportError`` so installing the core SDK does not pull in

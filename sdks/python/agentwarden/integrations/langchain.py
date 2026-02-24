@@ -1,11 +1,10 @@
-"""LangChain integration for AgentWarden v2.
+"""LangChain integration for AgentWarden.
 
 Provides :class:`AgentWardenCallbackHandler` -- a LangChain async callback
 handler that traces LLM calls and tool calls through AgentWarden governance
 sessions.
 
-Unlike the v1 integration which only traced passively, the v2 handler
-creates a governed session and records actions with full policy evaluation
+Creates a governed session and records actions with full policy evaluation
 context.
 
 Example::
@@ -52,7 +51,7 @@ class AgentWardenCallbackHandler(AsyncCallbackHandler):
     Records LLM calls (start/end with latency and token usage), tool calls,
     and chain-level events. Each chain run is mapped to an AgentWarden session.
 
-    This handler uses the v2 session-based governance pattern. A session is
+    This handler uses the session-based governance pattern. A session is
     created automatically on the first event and ended when the chain completes.
 
     Args:

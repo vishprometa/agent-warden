@@ -594,7 +594,7 @@ func runStart(configFile string, portOverride int, devMode bool) error {
 	}
 	masterMux.Handle("/api/", apiServer.Handler())
 
-	// Event endpoints (v2 — SDK/webhook event receiver)
+	// Event endpoints (SDK/webhook event receiver)
 	httpEventsServer.RegisterRoutes(masterMux)
 
 	httpServer := &http.Server{

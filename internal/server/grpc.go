@@ -1,5 +1,5 @@
 // Package server implements the gRPC and HTTP event ingestion servers for
-// AgentWarden v2. These are the real-time evaluation endpoints that SDKs
+// AgentWarden. These are the real-time evaluation endpoints that SDKs
 // call before/after every agent action. The management API lives separately
 // in internal/api.
 package server

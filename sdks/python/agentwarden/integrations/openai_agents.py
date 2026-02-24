@@ -1,4 +1,4 @@
-"""OpenAI Agents SDK integration for AgentWarden v2.
+"""OpenAI Agents SDK integration for AgentWarden.
 
 Provides :class:`GovernedRunner` -- a wrapper around the OpenAI Agents SDK
 ``Runner`` that governs agent executions through AgentWarden sessions.
