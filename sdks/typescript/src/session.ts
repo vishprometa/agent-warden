@@ -1,152 +1,244 @@
-import { AgentWarden } from "./client.js";
-import type { SessionMetrics } from "./types.js";
+import { AgentWarden } from './client.js';
+import { ActionDenied, ActionPendingApproval } from './errors.js';
+import type {
+  SessionConfig,
+  ActionEvent,
+  Verdict,
+  ToolCallOptions,
+  ApiCallOptions,
+  DbQueryOptions,
+  ChatOptions,
+  ScoreOptions,
+} from './types.js';
 
 /**
- * Enhanced session wrapper that provides scoped execution, scoring,
- * and lifecycle management for an AgentWarden session.
+ * A governed session that evaluates every agent action against policies
+ * before allowing execution. Created via `AgentWarden.session()`.
  *
- * A `WardenSession` is always tied to a specific `AgentWarden` client
- * and session ID. It wraps the management API for session-specific
- * operations while providing a clean interface for structured execution.
- *
- * @example
- * ```typescript
- * import { AgentWarden, WardenSession } from '@agentwarden/sdk';
- *
- * const warden = new AgentWarden({ agentId: 'my-agent' });
- * const session = new WardenSession(warden, 'task-123');
- *
- * await session.run(async (s) => {
- *   // All operations in this block are scoped to the session
- *   const client = s.wrapOpenAI(new OpenAI());
- *   const response = await client.chat.completions.create({ ... });
- *   return response;
- * });
- *
- * await session.score({ accuracy: 0.95, latency: 120 });
- * await session.end();
- * ```
+ * Each action method (tool, apiCall, dbQuery, chat) follows the same pattern:
+ * 1. Build an ActionEvent describing the intended action
+ * 2. POST it to the server for policy evaluation
+ * 3. If denied/terminate: throw ActionDenied
+ * 4. If pending approval: throw ActionPendingApproval
+ * 5. If allowed: execute the callback (if provided) and return the result
  */
-export class WardenSession {
-  /**
-   * The `AgentWarden` client scoped to this session.
-   * Created lazily on first access.
-   */
-  private _scopedClient: AgentWarden | undefined;
+export class Session {
+  private sessionId: string | undefined;
+  private readonly agentId: string;
+  private readonly agentVersion: string;
+  private readonly metadata: Record<string, string>;
+  private readonly client: AgentWarden;
 
-  /**
-   * Creates a new `WardenSession`.
-   *
-   * @param client - The parent `AgentWarden` client instance.
-   * @param id - Unique session identifier. All requests made through
-   *   this session are grouped under this ID.
-   */
-  constructor(
-    private readonly client: AgentWarden,
-    public readonly id: string,
-  ) {}
+  private actionCount = 0;
+  private totalCost = 0;
+  private startedAt: number;
 
-  /**
-   * Returns an `AgentWarden` client scoped to this session.
-   * The scoped client inherits all configuration from the parent
-   * but attaches this session's ID to every request.
-   */
-  private getScopedClient(): AgentWarden {
-    if (!this._scopedClient) {
-      this._scopedClient = this.client.withSession(this.id);
-    }
-    return this._scopedClient;
+  constructor(client: AgentWarden, config: SessionConfig) {
+    this.client = client;
+    this.agentId = config.agentId;
+    this.agentVersion = config.agentVersion || '1.0.0';
+    this.metadata = config.metadata || {};
+    this.startedAt = Date.now();
   }
 
-  /**
-   * Wraps an OpenAI-compatible client to route requests through this session.
-   *
-   * Convenience method equivalent to `client.withSession(id).wrapOpenAI(openai)`.
-   *
-   * @param openaiClient - An OpenAI SDK client instance (or any client with
-   *   `baseURL` and `defaultHeaders` properties).
-   * @returns The same client, now routing through the proxy under this session.
-   */
-  wrapOpenAI<T extends { baseURL: string; defaultHeaders?: Record<string, string | null | undefined> }>(
-    openaiClient: T,
-  ): T {
-    return this.getScopedClient().wrapOpenAI(openaiClient);
+  /** @internal - Called by AgentWarden.session() to register the session with the server. */
+  async start(): Promise<void> {
+    const result = await this.client._post('/api/sessions', {
+      agent_id: this.agentId,
+      agent_version: this.agentVersion,
+      metadata: this.metadata,
+    }) as { session_id: string };
+    this.sessionId = result.session_id;
+    this.startedAt = Date.now();
   }
 
-  /**
-   * Execute a function within this session context.
-   *
-   * The callback receives this `WardenSession` instance, allowing
-   * access to `wrapOpenAI()` and other session-scoped methods.
-   * If the callback throws, the error propagates to the caller.
-   *
-   * @param fn - Async function to execute within the session context.
-   * @returns The return value of the callback.
-   *
-   * @example
-   * ```typescript
-   * const result = await session.run(async (s) => {
-   *   const client = s.wrapOpenAI(new OpenAI());
-   *   return await client.chat.completions.create({
-   *     model: 'gpt-4',
-   *     messages: [{ role: 'user', content: 'Hello' }],
-   *   });
-   * });
-   * ```
-   */
-  async run<T>(fn: (session: WardenSession) => Promise<T>): Promise<T> {
-    return fn(this);
+  /** Returns the server-assigned session ID. */
+  get id(): string | undefined {
+    return this.sessionId;
   }
 
-  /**
-   * Score this session with performance metrics.
-   *
-   * Metrics are arbitrary key-value pairs (e.g., accuracy, latency,
-   * token efficiency). They are persisted on the session record and
-   * can be queried via the management API.
-   *
-   * Uses `POST /api/sessions/:id/score` on the management API.
-   *
-   * @param metrics - Key-value pairs where values are numbers.
-   *
-   * @example
-   * ```typescript
-   * await session.score({
-   *   accuracy: 0.95,
-   *   latency_ms: 1200,
-   *   tokens_used: 450,
-   * });
-   * ```
-   */
-  async score(metrics: SessionMetrics): Promise<void> {
-    const mgmt = this.client.management();
-    const baseUrl = (mgmt as unknown as { baseUrl: string }).baseUrl;
+  // ---------------------------------------------------------------------------
+  // Action methods
+  // ---------------------------------------------------------------------------
 
-    const url = `${baseUrl}/api/sessions/${encodeURIComponent(this.id)}/score`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ score: metrics }),
+  /**
+   * Evaluate and optionally execute a tool call.
+   *
+   * @returns The verdict if no `execute` callback is provided,
+   *          or the result of the callback if allowed.
+   */
+  async tool<T = unknown>(options: ToolCallOptions<T>): Promise<T | Verdict> {
+    const verdict = await this.evaluate({
+      type: 'tool.call',
+      name: options.name,
+      params: options.params || {},
+      target: options.target || '',
     });
 
-    if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`Failed to score session ${this.id}: ${res.status} ${body}`);
+    if (options.execute) {
+      return options.execute();
     }
+    return verdict;
   }
 
   /**
-   * End this session by terminating it via the management API.
+   * Evaluate and optionally execute an API call.
    *
-   * Once ended, subsequent requests using this session ID will
-   * be rejected by the proxy.
+   * @returns The verdict if no `execute` callback is provided,
+   *          or the result of the callback if allowed.
+   */
+  async apiCall<T = unknown>(options: ApiCallOptions<T>): Promise<T | Verdict> {
+    const verdict = await this.evaluate({
+      type: 'api.request',
+      name: options.name,
+      params: options.params || {},
+      target: options.target || '',
+    });
+
+    if (options.execute) {
+      return options.execute();
+    }
+    return verdict;
+  }
+
+  /**
+   * Evaluate and optionally execute a database query.
    *
-   * @example
-   * ```typescript
-   * await session.end();
-   * ```
+   * @returns The verdict if no `execute` callback is provided,
+   *          or the result of the callback if allowed.
+   */
+  async dbQuery<T = unknown>(options: DbQueryOptions<T>): Promise<T | Verdict> {
+    const verdict = await this.evaluate({
+      type: 'db.query',
+      name: options.query,
+      params: { query: options.query },
+      target: options.target || '',
+    });
+
+    if (options.execute) {
+      return options.execute();
+    }
+    return verdict;
+  }
+
+  /**
+   * Evaluate and optionally execute a chat/LLM call.
+   *
+   * @returns The verdict if no `execute` callback is provided,
+   *          or the result of the callback if allowed.
+   */
+  async chat<T = unknown>(options: ChatOptions<T>): Promise<T | Verdict> {
+    const verdict = await this.evaluate({
+      type: 'llm.chat',
+      name: options.model,
+      params: { model: options.model, messages: options.messages },
+      target: options.model,
+    });
+
+    if (options.execute) {
+      return options.execute();
+    }
+    return verdict;
+  }
+
+  /**
+   * Score this session with quality/completion metrics.
+   * Sent to the server for observability and analytics.
+   */
+  async score(options: ScoreOptions): Promise<void> {
+    if (!this.sessionId) {
+      throw new Error('Session not started. Call start() first.');
+    }
+    await this.client._post(`/api/sessions/${this.sessionId}/score`, {
+      task_completed: options.taskCompleted,
+      quality: options.quality,
+      metadata: options.metadata,
+    });
+  }
+
+  /**
+   * End this session. No further actions can be evaluated after this.
    */
   async end(): Promise<void> {
-    await this.client.management().terminateSession(this.id);
+    if (!this.sessionId) {
+      throw new Error('Session not started. Call start() first.');
+    }
+    await this.client._post(`/api/sessions/${this.sessionId}/end`, {});
+  }
+
+  // ---------------------------------------------------------------------------
+  // Internal
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Build an ActionEvent and send it to the server for policy evaluation.
+   * Throws ActionDenied or ActionPendingApproval if the action is not allowed.
+   */
+  private async evaluate(action: {
+    type: string;
+    name: string;
+    params: Record<string, unknown>;
+    target: string;
+  }): Promise<Verdict> {
+    if (!this.sessionId) {
+      throw new Error('Session not started. Call start() first.');
+    }
+
+    this.actionCount++;
+    const durationSeconds = (Date.now() - this.startedAt) / 1000;
+
+    const event: ActionEvent = {
+      session_id: this.sessionId,
+      agent_id: this.agentId,
+      agent_version: this.agentVersion,
+      action: {
+        type: action.type,
+        name: action.name,
+        params_json: JSON.stringify(action.params),
+        target: action.target,
+      },
+      context: {
+        session_cost: this.totalCost,
+        session_action_count: this.actionCount,
+        session_duration_seconds: durationSeconds,
+      },
+      metadata: this.metadata,
+    };
+
+    const verdict = await this.client._post('/api/evaluate', event) as Verdict;
+
+    this.handleVerdict(verdict);
+
+    return verdict;
+  }
+
+  /**
+   * Inspect a verdict and throw the appropriate error if the action is blocked.
+   */
+  private handleVerdict(verdict: Verdict): void {
+    switch (verdict.verdict) {
+      case 'deny':
+      case 'terminate':
+        throw new ActionDenied(
+          verdict.policy_name || 'unknown',
+          verdict.message || `Action ${verdict.verdict} by policy`,
+          verdict.suggestions || [],
+        );
+
+      case 'approve':
+        if (verdict.approval_id) {
+          throw new ActionPendingApproval(
+            verdict.approval_id,
+            verdict.policy_name || 'unknown',
+            verdict.timeout_seconds || 300,
+          );
+        }
+        break;
+
+      case 'allow':
+      case 'throttle':
+        // Allowed — proceed with execution.
+        break;
+    }
   }
 }

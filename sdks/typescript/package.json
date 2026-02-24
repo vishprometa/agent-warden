@@ -1,7 +1,7 @@
 {
   "name": "@agentwarden/sdk",
-  "version": "0.1.0",
-  "description": "TypeScript SDK for AgentWarden — runtime governance proxy for AI agents",
+  "version": "0.2.0",
+  "description": "TypeScript SDK for AgentWarden v2 — session-based runtime governance for AI agents",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,26 +9,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./management": {
-      "types": "./dist/management.d.ts",
-      "import": "./dist/management.js"
-    },
-    "./proxy": {
-      "types": "./dist/proxy.d.ts",
-      "import": "./dist/proxy.js"
-    },
-    "./discovery": {
-      "types": "./dist/discovery.d.ts",
-      "import": "./dist/discovery.js"
-    },
-    "./session": {
-      "types": "./dist/session.d.ts",
-      "import": "./dist/session.js"
-    },
-    "./middleware": {
-      "types": "./dist/middleware.d.ts",
-      "import": "./dist/middleware.js"
     }
   },
   "files": [
@@ -39,15 +19,8 @@
     "build": "tsc",
     "prepublishOnly": "npm run build"
   },
-  "peerDependencies": {
-    "openai": ">=4.0.0"
-  },
-  "peerDependenciesMeta": {
-    "openai": {
-      "optional": true
-    }
-  },
   "devDependencies": {
+    "@types/node": "^25.3.0",
     "typescript": "^5.5.0"
   },
   "keywords": [
@@ -55,11 +28,9 @@
     "ai",
     "agent",
     "governance",
-    "proxy",
-    "openai",
-    "llm",
-    "observability",
-    "guardrails"
+    "session",
+    "guardrails",
+    "observability"
   ],
   "license": "MIT",
   "repository": {
