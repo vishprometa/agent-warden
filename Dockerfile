@@ -12,7 +12,7 @@ RUN npm run build
 # ============================================================================
 # Stage 2: Build the Go binary
 # ============================================================================
-FROM golang:1.26-alpine AS go-builder
+FROM golang:1.25-alpine AS go-builder
 
 # CGO is required for mattn/go-sqlite3
 RUN apk add --no-cache gcc musl-dev

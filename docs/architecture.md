@@ -519,7 +519,7 @@ Stage 1: Node.js (node:22-alpine)
   - Installs npm dependencies
   - Builds the React dashboard (Vite -> dist/)
 
-Stage 2: Go (golang:1.26-alpine)
+Stage 2: Go (golang:1.25-alpine)
   - Installs gcc + musl-dev (CGO required for SQLite)
   - Downloads Go modules
   - Copies dashboard dist/ into embed directory
