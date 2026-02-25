@@ -34,6 +34,7 @@ export default defineConfig({
         items: [
           { text: 'Architecture', link: '/architecture' },
           { text: 'Policies', link: '/policies' },
+          { text: 'OpenClaw Integration', link: '/openclaw' },
           { text: 'Self-Evolution', link: '/evolution' },
         ]
       },

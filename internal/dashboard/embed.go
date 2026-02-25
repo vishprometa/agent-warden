@@ -21,26 +21,37 @@ func Handler() http.Handler {
 		panic("dashboard: failed to access embedded dist: " + err.Error())
 	}
 
+	// Pre-read index.html for direct serving. Go's http.FileServer redirects
+	// "/index.html" to "./" (clean URL convention), which causes an infinite
+	// redirect loop when mounted at a sub-path like /dashboard/. Serving the
+	// bytes directly avoids this.
+	indexHTML, err := fs.ReadFile(sub, "index.html")
+	if err != nil {
+		panic("dashboard: missing index.html in embedded dist: " + err.Error())
+	}
+
 	fileServer := http.FileServer(http.FS(sub))
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Strip the /dashboard/ prefix for file lookups.
 		path := strings.TrimPrefix(r.URL.Path, "/dashboard")
 		if path == "" || path == "/" {
-			path = "/index.html"
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write(indexHTML)
+			return
 		}
 
 		// Try to open the file to check if it exists.
 		f, err := sub.Open(strings.TrimPrefix(path, "/"))
 		if err != nil {
 			// File doesn't exist — serve index.html for SPA routing.
-			r.URL.Path = "/index.html"
-			fileServer.ServeHTTP(w, r)
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write(indexHTML)
 			return
 		}
 		_ = f.Close()
 
-		// Serve the actual file.
+		// Serve the actual static file (JS, CSS, images).
 		r.URL.Path = path
 		fileServer.ServeHTTP(w, r)
 	})

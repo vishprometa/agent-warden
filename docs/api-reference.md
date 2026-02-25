@@ -14,6 +14,7 @@ AgentWarden exposes a REST management API and a WebSocket endpoint for real-time
 - [Policies](#policies)
 - [Approvals](#approvals)
 - [Violations](#violations)
+- [Kill Switch](#kill-switch)
 - [System](#system)
 - [WebSocket](#websocket)
 
@@ -541,6 +542,88 @@ Returns policy violation records.
       }
     }
   ]
+}
+```
+
+---
+
+## Kill Switch
+
+Emergency stop mechanism that operates outside the LLM context window. See [OpenClaw Integration - Kill Switch](openclaw.md#kill-switch) for full details.
+
+### Trigger Kill Switch
+
+```
+POST /api/killswitch/trigger
+```
+
+Activates the kill switch at the specified scope. All actions matching the scope are immediately blocked.
+
+**Request Body:**
+
+```json
+{
+  "scope": "global",
+  "target_id": "",
+  "reason": "runaway agent detected"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `scope` | string | Yes | Kill scope: `global`, `agent`, or `session` |
+| `target_id` | string | For agent/session | Agent ID or session ID to kill |
+| `reason` | string | Yes | Human-readable reason (recorded in audit trail) |
+
+**Response:**
+
+```json
+{
+  "status": "triggered",
+  "scope": "global"
+}
+```
+
+### Get Kill Switch Status
+
+```
+GET /api/killswitch/status
+```
+
+Returns the current state of all kill switches.
+
+**Response:**
+
+```json
+{
+  "global_triggered": false,
+  "agent_kills": {},
+  "session_kills": {},
+  "history_count": 3
+}
+```
+
+### Reset Kill Switch
+
+```
+POST /api/killswitch/reset
+```
+
+Disarms the kill switch at the specified scope.
+
+**Request Body:**
+
+```json
+{
+  "scope": "global"
+}
+```
+
+**Response:**
+
+```json
+{
+  "status": "reset"
 }
 ```
 

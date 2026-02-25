@@ -1,0 +1,79 @@
+# AgentWarden Email Safety Policy Pack for OpenClaw
+# Inspired by the Summer Yue incident where an OpenClaw agent deleted
+# 200+ emails and ignored STOP commands. These policies prevent
+# runaway email operations.
+
+policies:
+  # ─── Email Deletion Limits ───
+  - name: email-delete-limit
+    condition: >
+      action.type == "tool.call"
+      && action.name.contains("delete")
+      && action.name.contains("email")
+      && session.action_count("tool.call", "3600s") > 5
+    effect: approve
+    timeout: 5m
+    timeout_effect: deny
+    message: "Deleting more than 5 emails per session requires approval"
+
+  - name: email-bulk-delete-block
+    condition: >
+      action.type == "tool.call"
+      && action.name.contains("delete")
+      && action.params.count > 10
+    effect: deny
+    message: "Bulk email deletion (>10) blocked"
+
+  # ─── Email Send Limits ───
+  - name: email-send-limit
+    condition: >
+      action.type == "message.send"
+      && action.params.channel.contains("email")
+      && session.action_count("message.send", "3600s") > 10
+    effect: deny
+    message: "Email send limit exceeded (10 per hour)"
+
+  # ─── STOP Word Detection ───
+  # This is enforced at the proxy level via safety invariants,
+  # but this policy provides an additional layer.
+  - name: stop-word-enforcement
+    condition: >
+      action.type == "tool.call"
+      && session.action_count("tool.call", "5s") > 3
+    effect: approve
+    timeout: 30s
+    timeout_effect: deny
+    message: "Rapid tool calls detected — pausing for human review"
+
+  # ─── Email Forwarding Protection ───
+  - name: no-email-forward-external
+    condition: >
+      action.type == "message.send"
+      && action.name.contains("forward")
+    effect: approve
+    timeout: 5m
+    timeout_effect: deny
+    message: "Email forwarding requires human approval"
+
+  # ─── Attachment Protection ───
+  - name: no-attachment-download
+    condition: >
+      action.type == "file.write"
+      && action.params.path.contains("attachment")
+    effect: approve
+    timeout: 5m
+    timeout_effect: deny
+    message: "Attachment download requires approval"
+
+detection:
+  loop:
+    enabled: true
+    threshold: 3
+    window: 30s
+    action: pause
+
+  velocity:
+    enabled: true
+    threshold: 5
+    sustained_seconds: 3
+    action: pause

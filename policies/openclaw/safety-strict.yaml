@@ -1,0 +1,100 @@
+# AgentWarden Safety Strict Policy Pack for OpenClaw
+# Maximum governance — human approval required for all high-risk actions.
+
+policies:
+  # ─── Cost Circuit Breakers (tight) ───
+  - name: session-budget-strict
+    condition: session.cost > 5.00
+    effect: terminate
+    message: "Session killed: exceeded $5 budget (strict mode)"
+
+  - name: daily-agent-budget-strict
+    condition: agent.daily_cost > 25.00
+    effect: terminate
+    message: "Agent daily budget exceeded $25 (strict mode)"
+
+  # ─── Block All Dangerous Operations ───
+  - name: no-shell
+    condition: 'action.type == "tool.call"'
+    effect: approve
+    timeout: 5m
+    timeout_effect: deny
+    message: "Tool call requires human approval (strict mode)"
+
+  - name: no-file-write
+    condition: 'action.type == "file.write" || action.type == "file.delete"'
+    effect: approve
+    timeout: 5m
+    timeout_effect: deny
+    message: "File modification requires human approval"
+
+  - name: no-agent-spawn
+    condition: 'action.type == "agent.spawn"'
+    effect: deny
+    message: "Agent spawning blocked (strict mode)"
+
+  - name: no-financial
+    condition: 'action.type == "financial.transfer"'
+    effect: deny
+    message: "Financial transfers blocked (strict mode)"
+
+  - name: no-skill-install
+    condition: 'action.type == "skill.install"'
+    effect: approve
+    timeout: 10m
+    timeout_effect: deny
+    message: "Skill installation requires human approval"
+
+  - name: no-config-change
+    condition: 'action.type == "config.change"'
+    effect: deny
+    message: "Configuration changes blocked (strict mode)"
+
+  # ─── Message Approval ───
+  - name: approve-messages
+    condition: 'action.type == "message.send"'
+    effect: approve
+    timeout: 5m
+    timeout_effect: deny
+    message: "Outbound message requires human approval"
+
+  # ─── Sensitive File Protection ───
+  - name: no-ssh-access
+    condition: 'action.params.path.contains(".ssh") || action.params.path.contains("id_rsa")'
+    effect: deny
+    message: "SSH credential access blocked"
+
+  - name: no-credential-access
+    condition: 'action.params.path.contains(".env") || action.params.path.contains("credentials") || action.params.path.contains("secret")'
+    effect: deny
+    message: "Credential file access blocked"
+
+  # ─── Rate Limiting (strict) ───
+  - name: strict-rate-limit
+    condition: session.action_count("api.call", "60s") > 30
+    effect: deny
+    message: "Rate limit exceeded (strict: 30/min)"
+
+detection:
+  loop:
+    enabled: true
+    threshold: 3
+    window: 30s
+    action: terminate
+
+  velocity:
+    enabled: true
+    threshold: 5
+    sustained_seconds: 3
+    action: terminate
+
+  cost_anomaly:
+    enabled: true
+    multiplier: 5
+    action: terminate
+
+  spiral:
+    enabled: true
+    similarity_threshold: 0.85
+    window: 3
+    action: terminate

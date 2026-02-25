@@ -14,6 +14,12 @@ Complete reference for the `agentwarden.yaml` configuration file.
 - [Detection](#detection)
 - [Alerts](#alerts)
 - [Evolution](#evolution)
+- [Adapters](#adapters)
+- [Capabilities](#capabilities)
+- [Spawn](#spawn)
+- [Skills](#skills)
+- [Messaging](#messaging)
+- [Sanitize](#sanitize)
 - [Full Example](#full-example)
 
 ---
@@ -254,6 +260,91 @@ Detects when an LLM produces highly similar consecutive outputs, indicating a no
 | `similarity_threshold` | float | `0.9` | Cosine similarity threshold (0.0 to 1.0). Higher values require more similar outputs. |
 | `window` | int | `5` | Number of consecutive outputs to compare |
 | `action` | string | `alert` | Response when a spiral is detected: `pause`, `alert`, `terminate` |
+
+### Velocity Detection
+
+Detects rapid-fire actions that suggest a runaway agent. Unlike loop detection (repeated identical actions), velocity detection catches diverse rapid actions.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `true` | Enable velocity detection |
+| `threshold` | int | `10` | Actions-per-second threshold |
+| `sustained_seconds` | int | `5` | Velocity must exceed threshold for this many seconds |
+| `action` | string | `pause` | Response when velocity is breached: `pause`, `alert`, `terminate` |
+
+---
+
+## Adapters
+
+Configures integrations with external agent frameworks. Currently supports OpenClaw.
+
+```yaml
+adapters:
+  openclaw:
+    enabled: true
+    mode: inline
+    gateway_url: ws://localhost:4000
+    auth_token: ${OPENCLAW_TOKEN}
+    proxy_path: /gateway
+    intercept:
+      - tool_calls
+      - skill_installs
+      - message_sends
+      - agent_spawns
+      - financial_transfers
+      - config_changes
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `false` | Enable the OpenClaw adapter |
+| `mode` | string | `inline` | Adapter mode: `inline` (WebSocket proxy), `sidecar`, or `event-hook` |
+| `gateway_url` | string | `ws://localhost:4000` | OpenClaw gateway WebSocket URL |
+| `auth_token` | string | `""` | Authentication token for the OpenClaw gateway |
+| `proxy_path` | string | `/gateway` | HTTP path where the WebSocket proxy is mounted |
+| `intercept` | list | all | Which event types to intercept |
+
+For the full OpenClaw integration guide, see [OpenClaw Integration](openclaw.md).
+
+---
+
+## Capabilities
+
+Per-agent capability boundaries enforced at the proxy level. See [OpenClaw Integration - Capability Scoping](openclaw.md#capability-scoping) for details.
+
+---
+
+## Spawn
+
+Controls agent self-replication. See [OpenClaw Integration - Spawn Governance](openclaw.md#spawn-governance) for details.
+
+```yaml
+spawn:
+  enabled: true
+  max_children_per_agent: 3
+  max_depth: 2
+  max_global_agents: 20
+  cascade_kill: true
+  child_budget_max: 0.5
+```
+
+---
+
+## Skills
+
+Skill/plugin governance for the ClawHub ecosystem. See [OpenClaw Integration - Skill Governance](openclaw.md#skill-governance) for details.
+
+---
+
+## Messaging
+
+Outbound message governance across channels. See [OpenClaw Integration - Message Governance](openclaw.md#message-governance) for details.
+
+---
+
+## Sanitize
+
+Prompt injection detection for LLM inputs. See [OpenClaw Integration - Prompt Injection Defense](openclaw.md#prompt-injection-defense) for details.
 
 ---
 

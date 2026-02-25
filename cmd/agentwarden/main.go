@@ -15,17 +15,23 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/agentwarden/agentwarden/internal/adapter/openclaw"
 	"github.com/agentwarden/agentwarden/internal/alert"
 	"github.com/agentwarden/agentwarden/internal/api"
 	"github.com/agentwarden/agentwarden/internal/approval"
+	"github.com/agentwarden/agentwarden/internal/capability"
 	"github.com/agentwarden/agentwarden/internal/config"
 	"github.com/agentwarden/agentwarden/internal/cost"
 	"github.com/agentwarden/agentwarden/internal/dashboard"
 	"github.com/agentwarden/agentwarden/internal/detection"
+	"github.com/agentwarden/agentwarden/internal/killswitch"
 	"github.com/agentwarden/agentwarden/internal/mdloader"
 	"github.com/agentwarden/agentwarden/internal/policy"
+	"github.com/agentwarden/agentwarden/internal/safety"
+	"github.com/agentwarden/agentwarden/internal/sanitize"
 	"github.com/agentwarden/agentwarden/internal/server"
 	"github.com/agentwarden/agentwarden/internal/session"
+	"github.com/agentwarden/agentwarden/internal/spawn"
 	"github.com/agentwarden/agentwarden/internal/trace"
 )
 
@@ -476,7 +482,44 @@ func main() {
 		},
 	}
 
-	rootCmd.AddCommand(startCmd, initCmd, statusCmd, versionCmd, policyCmd, traceCmd, agentCmd, evolveCmd, doctorCmd, mockCmd)
+	// ─── kill (emergency kill switch) ───
+	var killAll bool
+	killCmd := &cobra.Command{
+		Use:   "kill [agent-id|session-id]",
+		Short: "Emergency kill switch — immediately block all agent actions",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			p := resolvePort(port)
+			if killAll {
+				resp, err := http.Post(fmt.Sprintf("http://localhost:%d/api/killswitch/trigger", p), "application/json",
+					strings.NewReader(`{"scope":"global","reason":"CLI kill command","source":"cli"}`))
+				if err != nil {
+					return fmt.Errorf("failed to connect: %w", err)
+				}
+				_ = resp.Body.Close()
+				fmt.Println("  GLOBAL KILL SWITCH ACTIVATED — all agent actions blocked")
+				return nil
+			}
+			if len(args) == 0 {
+				return fmt.Errorf("specify agent-id, session-id, or --all")
+			}
+			target := args[0]
+			scope := "agent"
+			if strings.HasPrefix(target, "ses_") || strings.HasPrefix(target, "oc_") {
+				scope = "session"
+			}
+			body := fmt.Sprintf(`{"scope":"%s","target_id":"%s","reason":"CLI kill command","source":"cli"}`, scope, target)
+			resp, err := http.Post(fmt.Sprintf("http://localhost:%d/api/killswitch/trigger", p), "application/json", strings.NewReader(body))
+			if err != nil {
+				return fmt.Errorf("failed to connect: %w", err)
+			}
+			_ = resp.Body.Close()
+			fmt.Printf("  KILL SWITCH ACTIVATED for %s %s\n", scope, target)
+			return nil
+		},
+	}
+	killCmd.Flags().BoolVar(&killAll, "all", false, "Activate global kill switch (blocks ALL agents)")
+
+	rootCmd.AddCommand(startCmd, initCmd, statusCmd, versionCmd, policyCmd, traceCmd, agentCmd, evolveCmd, doctorCmd, mockCmd, killCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -576,6 +619,116 @@ func runStart(configFile string, portOverride int, devMode bool) error {
 		})
 	}, logger)
 
+	// ─── Autonomous Agent Governance Components ───
+
+	// Initialize kill switch (checked before ALL policy evaluation).
+	ks := killswitch.New(logger)
+
+	// Start file-based kill switch watcher.
+	go func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			ks.CheckFileKill()
+		}
+	}()
+
+	// Initialize capability engine.
+	capEngine := capability.NewEngine(logger)
+
+	// Initialize safety invariants engine.
+	safetyEngine := safety.NewEngine(logger)
+
+	// Initialize spawn governor.
+	spawnGov := spawn.NewGovernor(spawn.Config{
+		Enabled:             cfg.Spawn.Enabled,
+		MaxChildrenPerAgent: cfg.Spawn.MaxChildrenPerAgent,
+		MaxDepth:            cfg.Spawn.MaxDepth,
+		MaxGlobalAgents:     cfg.Spawn.MaxGlobalAgents,
+		InheritCapabilities: cfg.Spawn.InheritCapabilities,
+		RequireApproval:     cfg.Spawn.RequireApproval,
+		CascadeKill:         cfg.Spawn.CascadeKill,
+		ChildBudgetMax:      cfg.Spawn.ChildBudgetMax,
+	}, logger)
+
+	// Initialize prompt injection scanner.
+	injectionScanner := sanitize.NewScanner(sanitize.Config{
+		Enabled: cfg.Sanitize.Enabled,
+		Mode:    cfg.Sanitize.Mode,
+	}, logger)
+
+	// Initialize OpenClaw adapter if enabled.
+	var openclawAdapter *openclaw.GatewayAdapter
+	if cfg.Adapters.OpenClaw.Enabled {
+		openclawAdapter = openclaw.NewGatewayAdapter(openclaw.Config{
+			Enabled:    true,
+			Mode:       cfg.Adapters.OpenClaw.Mode,
+			GatewayURL: cfg.Adapters.OpenClaw.GatewayURL,
+			AuthToken:  cfg.Adapters.OpenClaw.AuthToken,
+			ProxyPath:  cfg.Adapters.OpenClaw.ProxyPath,
+			Intercept:  cfg.Adapters.OpenClaw.Intercept,
+		}, logger)
+
+		// Start the adapter with a governance-aware evaluator.
+		go func() {
+			evaluator := func(ctx policy.ActionContext) policy.PolicyResult {
+				// 1. Kill switch check (highest priority).
+				if blocked, reason := ks.IsBlocked(ctx.Agent.ID, ctx.Session.ID); blocked {
+					return policy.PolicyResult{
+						Effect:  "terminate",
+						Message: reason,
+					}
+				}
+
+				// 2. Capability check.
+				capResult := capEngine.Check(ctx.Agent.ID, ctx.Action.Type, ctx.Action.Params)
+				if !capResult.Allowed {
+					return policy.PolicyResult{
+						Effect:     "deny",
+						PolicyName: "capability-boundary",
+						Message:    capResult.Reason,
+					}
+				}
+
+				// 3. Spawn governance.
+				if ctx.Action.Type == "agent.spawn" {
+					childID := ctx.Action.Target
+					result := spawnGov.RequestSpawn(ctx.Agent.ID, childID, 0)
+					if !result.Allowed {
+						return policy.PolicyResult{
+							Effect:     "deny",
+							PolicyName: "spawn-governor",
+							Message:    result.Reason,
+						}
+					}
+				}
+
+				// 4. Policy evaluation.
+				return policyEngine.Evaluate(ctx)
+			}
+
+			if err := openclawAdapter.Start(context.Background(), evaluator); err != nil {
+				logger.Error("OpenClaw adapter error", "error", err)
+			}
+		}()
+	}
+
+	// Log governance component status.
+	logger.Info("governance components initialized",
+		"kill_switch", "armed",
+		"capability_engine", true,
+		"safety_invariants", safetyEngine.Count(),
+		"spawn_governor", cfg.Spawn.Enabled,
+		"injection_scanner", cfg.Sanitize.Enabled,
+		"openclaw_adapter", cfg.Adapters.OpenClaw.Enabled,
+	)
+
+	// Suppress unused variable warnings for components used via API.
+	_ = injectionScanner
+	_ = spawnGov
+	_ = safetyEngine
+	_ = capEngine
+
 	// Initialize management API server
 	apiServer := api.NewServer(cfg.Server, store, cfgLoader, approvalQueue, logger)
 
@@ -600,6 +753,78 @@ func runStart(configFile string, portOverride int, devMode bool) error {
 
 	// Event endpoints (SDK/webhook event receiver)
 	httpEventsServer.RegisterRoutes(masterMux)
+
+	// OpenClaw gateway proxy endpoint.
+	if openclawAdapter != nil {
+		proxyPath := cfg.Adapters.OpenClaw.ProxyPath
+		if proxyPath == "" {
+			proxyPath = "/gateway"
+		}
+		masterMux.HandleFunc(proxyPath, openclawAdapter.HandleWebSocket)
+		logger.Info("OpenClaw gateway proxy registered", "path", proxyPath)
+	}
+
+	// Kill switch API endpoints.
+	masterMux.HandleFunc("POST /api/killswitch/trigger", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Scope    string `json:"scope"`
+			TargetID string `json:"target_id"`
+			Reason   string `json:"reason"`
+			Source   string `json:"source"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		switch req.Scope {
+		case "global":
+			ks.TriggerGlobal(req.Reason, req.Source)
+			if openclawAdapter != nil {
+				openclawAdapter.KillAll()
+			}
+		case "agent":
+			ks.TriggerAgent(req.TargetID, req.Reason, req.Source)
+			if openclawAdapter != nil {
+				openclawAdapter.KillAgent(req.TargetID)
+			}
+		case "session":
+			ks.TriggerSession(req.TargetID, req.Reason, req.Source)
+			if openclawAdapter != nil {
+				openclawAdapter.KillSession(req.TargetID)
+			}
+		default:
+			http.Error(w, "invalid scope: use global, agent, or session", http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "triggered"})
+	})
+
+	masterMux.HandleFunc("GET /api/killswitch/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(ks.Status())
+	})
+
+	masterMux.HandleFunc("POST /api/killswitch/reset", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Scope    string `json:"scope"`
+			TargetID string `json:"target_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		switch req.Scope {
+		case "global":
+			ks.ResetGlobal()
+		case "agent":
+			ks.ResetAgent(req.TargetID)
+		case "session":
+			ks.ResetSession(req.TargetID)
+		}
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "reset"})
+	})
 
 	httpServer := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),

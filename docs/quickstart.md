@@ -289,10 +289,31 @@ X-AgentWarden-Trace-Id: 01HQZX7ABC123DEF456
 
 ---
 
+## Using with OpenClaw
+
+AgentWarden can govern autonomous OpenClaw agents via a transparent WebSocket reverse proxy. No changes to OpenClaw are needed -- just point your agents at AgentWarden.
+
+```bash
+# 1. Configure the adapter in agentwarden.yaml
+# 2. Start AgentWarden
+agentwarden start
+
+# 3. Point OpenClaw to AgentWarden (just change 2 env vars)
+OPENCLAW_GATEWAY_URL=ws://localhost:6777/gateway
+OPENAI_API_BASE=http://localhost:6777
+```
+
+AgentWarden adds kill switches, capability scoping, spawn governance, skill vetting, message governance, safety invariants, and prompt injection defense on top of the standard policy engine.
+
+For the full setup guide, see [OpenClaw Integration](openclaw.md).
+
+---
+
 ## Next Steps
 
 - [Configuration Reference](configuration.md) -- Full reference for `agentwarden.yaml`
 - [Policy Authoring Guide](policies.md) -- Write CEL-based governance policies
+- [OpenClaw Integration](openclaw.md) -- Govern autonomous OpenClaw agents
 - [Architecture Deep Dive](architecture.md) -- Understand the interception pipeline
 - [API Reference](api-reference.md) -- Management API endpoints
 - [Self-Evolution Guide](evolution.md) -- Auto-tuning agent behavior

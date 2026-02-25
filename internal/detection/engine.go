@@ -22,24 +22,26 @@ type EventHandler func(event Event)
 
 // Engine orchestrates all detection subsystems.
 type Engine struct {
-	mu      sync.RWMutex
-	config  config.DetectionConfig
-	loop    *LoopDetector
-	anomaly *CostAnomalyDetector
-	spiral  *SpiralDetector
-	handler EventHandler
-	logger  *slog.Logger
+	mu       sync.RWMutex
+	config   config.DetectionConfig
+	loop     *LoopDetector
+	anomaly  *CostAnomalyDetector
+	spiral   *SpiralDetector
+	velocity *VelocityDetector
+	handler  EventHandler
+	logger   *slog.Logger
 }
 
 // NewEngine creates a new detection engine.
 func NewEngine(cfg config.DetectionConfig, handler EventHandler, logger *slog.Logger) *Engine {
 	return &Engine{
-		config:  cfg,
-		loop:    NewLoopDetector(cfg.Loop),
-		anomaly: NewCostAnomalyDetector(cfg.CostAnomaly),
-		spiral:  NewSpiralDetector(cfg.Spiral),
-		handler: handler,
-		logger:  logger,
+		config:   cfg,
+		loop:     NewLoopDetector(cfg.Loop),
+		anomaly:  NewCostAnomalyDetector(cfg.CostAnomaly),
+		spiral:   NewSpiralDetector(cfg.Spiral),
+		velocity: NewVelocityDetector(cfg.Velocity),
+		handler:  handler,
+		logger:   logger,
 	}
 }
 
@@ -99,6 +101,19 @@ func (e *Engine) Analyze(event ActionEvent) {
 			}
 		}
 	}
+
+	// Velocity detection (runaway agent breaker)
+	if cfg.Velocity.Enabled {
+		if detected := e.velocity.Check(event); detected != nil {
+			e.logger.Error("ACTION VELOCITY BREACH",
+				"session_id", event.SessionID,
+				"velocity", detected.Details["velocity"],
+			)
+			if e.handler != nil {
+				e.handler(*detected)
+			}
+		}
+	}
 }
 
 // ResetSession clears all detector state for a session.
@@ -106,6 +121,7 @@ func (e *Engine) ResetSession(sessionID string) {
 	e.loop.ResetSession(sessionID)
 	e.anomaly.ResetSession(sessionID)
 	e.spiral.ResetSession(sessionID)
+	e.velocity.ResetSession(sessionID)
 }
 
 // UpdateConfig updates the detection configuration.
@@ -116,4 +132,5 @@ func (e *Engine) UpdateConfig(cfg config.DetectionConfig) {
 	e.loop = NewLoopDetector(cfg.Loop)
 	e.anomaly = NewCostAnomalyDetector(cfg.CostAnomaly)
 	e.spiral = NewSpiralDetector(cfg.Spiral)
+	e.velocity = NewVelocityDetector(cfg.Velocity)
 }

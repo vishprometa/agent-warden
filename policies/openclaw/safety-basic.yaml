@@ -1,0 +1,79 @@
+# AgentWarden Safety Basic Policy Pack for OpenClaw
+# This is the recommended starter pack — apply this first, customize later.
+#
+# Usage: agentwarden init openclaw
+# Docs: https://agentwarden.dev/docs/openclaw/policies
+
+policies:
+  # ─── Cost Circuit Breakers ───
+  - name: session-budget
+    condition: session.cost > 10.00
+    effect: terminate
+    message: "Session killed: exceeded $10 budget"
+
+  - name: daily-agent-budget
+    condition: agent.daily_cost > 100.00
+    effect: terminate
+    message: "Agent daily budget exceeded $100"
+
+  # ─── Dangerous Tool Blocks ───
+  - name: no-shell-exec
+    condition: 'action.type == "tool.call" && action.name == "shell_exec"'
+    effect: deny
+    message: "Shell execution blocked by policy"
+
+  - name: no-rm-rf
+    condition: 'action.type == "tool.call" && action.params.command.contains("rm -rf")'
+    effect: terminate
+    message: "Destructive command blocked — session terminated"
+
+  - name: no-sudo
+    condition: 'action.type == "tool.call" && action.params.command.startsWith("sudo")'
+    effect: deny
+    message: "Sudo commands blocked"
+
+  # ─── Rate Limiting ───
+  - name: api-rate-limit
+    condition: session.action_count("api.call", "60s") > 100
+    effect: throttle
+    delay: 5s
+
+  - name: message-rate-limit
+    condition: session.action_count("message.send", "300s") > 25
+    effect: deny
+    message: "Message rate limit exceeded (25 per 5 minutes)"
+
+  # ─── Sensitive File Protection ───
+  - name: no-ssh-key-access
+    condition: 'action.type == "file.read" && action.params.path.contains(".ssh")'
+    effect: deny
+    message: "SSH key access blocked"
+
+  - name: no-env-file-access
+    condition: 'action.type == "file.read" && action.params.path.contains(".env")'
+    effect: deny
+    message: ".env file access blocked"
+
+detection:
+  loop:
+    enabled: true
+    threshold: 5
+    window: 60s
+    action: pause
+
+  velocity:
+    enabled: true
+    threshold: 10
+    sustained_seconds: 5
+    action: pause
+
+  cost_anomaly:
+    enabled: true
+    multiplier: 10
+    action: alert
+
+  spiral:
+    enabled: true
+    similarity_threshold: 0.9
+    window: 5
+    action: alert
