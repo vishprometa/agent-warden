@@ -9,12 +9,17 @@ import (
 	"github.com/agentwarden/agentwarden/internal/trace"
 )
 
+// LLMChatClient defines the interface for LLM chat completion.
+type LLMChatClient interface {
+	Chat(ctx context.Context, systemPrompt, userMessage string) (string, error)
+}
+
 // Analyzer queries traces and uses an LLM to identify failure patterns
 // for a given agent. It combines AGENT.md, EVOLVE.md, and PROMPT.md context
 // with real metrics and failure traces to produce actionable analysis.
 type Analyzer struct {
 	store trace.Store
-	llm   *LLMClient
+	llm   LLMChatClient
 }
 
 // AnalysisInput bundles all context the analyzer needs to produce a result.
@@ -47,7 +52,7 @@ type AnalysisResult struct {
 }
 
 // NewAnalyzer creates an Analyzer with the given trace store and LLM client.
-func NewAnalyzer(store trace.Store, llm *LLMClient) *Analyzer {
+func NewAnalyzer(store trace.Store, llm LLMChatClient) *Analyzer {
 	return &Analyzer{
 		store: store,
 		llm:   llm,
