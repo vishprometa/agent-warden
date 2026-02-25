@@ -3,7 +3,7 @@
 ## Config
 - **Project**: /Users/vish/Developer/agentwarden
 - **Started**: 2026-02-25
-- **Iteration**: 2
+- **Iteration**: 3
 
 ## Task Backlog
 
@@ -78,10 +78,10 @@
 - Files changed: `.gitignore`, `internal/dashboard/dist/*`
 
 ### Iteration 2
-- Fixed CI workflow Go version mismatch
-- Changed all 3 occurrences of `go-version: "1.26.0"` to `go-version: "1.25.x"` in `.github/workflows/ci.yml`
+- Fixed CI workflow Go version mismatch in release.yml
+- Changed `go-version: "1.26.0"` to `go-version: "1.25.x"` in `.github/workflows/release.yml` (line 23)
 - Verified `go build ./...` and `go test ./...` both pass
-- Files changed: `.github/workflows/ci.yml`
+- Files changed: `.github/workflows/release.yml`
 
 ## Bugs Found
 (none yet)
