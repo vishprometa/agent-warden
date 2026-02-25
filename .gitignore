@@ -16,10 +16,9 @@ coverage.html
 # Node / Dashboard
 node_modules/
 dashboard/dist/
-dist/
 
 # Embedded dashboard build (regenerated from dashboard/)
-internal/dashboard/dist/
+# internal/dashboard/dist/ — NOT ignored, committed for embed
 
 # Project: data and runtime
 data/
@@ -31,6 +30,8 @@ data/
 
 # Config with secrets (starter file is fine, user config is not)
 # agentwarden.yaml is intentionally NOT ignored (starter config)
+.env
+.env.*
 
 # IDE
 .idea/
@@ -46,11 +47,14 @@ data/
 Thumbs.db
 Desktop.ini
 
-# GoReleaser
-dist/
+# GoReleaser (root-level only)
+/dist/
 
 # Debug
 __debug_bin*
 __pycache__/
 *.pyc
 dashboard/tsconfig.tsbuildinfo
+
+# Loop logs (can get very large)
+.loop/logs/
