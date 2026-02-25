@@ -157,7 +157,7 @@ func (s *HTTPEventsServer) handleEvaluate(w http.ResponseWriter, r *http.Request
 		writeEventError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
 		return
 	}
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 
 	if req.Action.Type == "" {
 		writeEventError(w, http.StatusBadRequest, "action.type is required")
@@ -238,7 +238,7 @@ func (s *HTTPEventsServer) handleTrace(w http.ResponseWriter, r *http.Request) {
 		writeEventError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
 		return
 	}
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 
 	traceID := ulid.Make().String()
 
@@ -286,7 +286,7 @@ func (s *HTTPEventsServer) handleStartSession(w http.ResponseWriter, r *http.Req
 		writeEventError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
 		return
 	}
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 
 	if req.AgentID == "" {
 		writeEventError(w, http.StatusBadRequest, "agent_id is required")
@@ -383,7 +383,7 @@ func (s *HTTPEventsServer) handleScoreSession(w http.ResponseWriter, r *http.Req
 		writeEventError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
 		return
 	}
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 
 	scorePayload := map[string]interface{}{
 		"task_completed": req.TaskCompleted,

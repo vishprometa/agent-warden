@@ -6,8 +6,8 @@ import (
 
 // Config is the top-level AgentWarden configuration.
 type Config struct {
-	Server  ServerConfig  `yaml:"server"`
-	Storage StorageConfig `yaml:"storage"`
+	Server       ServerConfig    `yaml:"server"`
+	Storage      StorageConfig   `yaml:"storage"`
 	Policies     []PolicyConfig  `yaml:"policies"`
 	Detection    DetectionConfig `yaml:"detection"`
 	Evolution    EvolutionConfig `yaml:"evolution"`
@@ -27,11 +27,11 @@ type ServerConfig struct {
 }
 
 type StorageConfig struct {
-	Driver     string           `yaml:"driver"`
-	Path       string           `yaml:"path"`
-	Connection string           `yaml:"connection"`
-	Retention  time.Duration    `yaml:"retention"`
-	Redaction  []RedactionRule  `yaml:"redaction"`
+	Driver     string          `yaml:"driver"`
+	Path       string          `yaml:"path"`
+	Connection string          `yaml:"connection"`
+	Retention  time.Duration   `yaml:"retention"`
+	Redaction  []RedactionRule `yaml:"redaction"`
 }
 
 type RedactionRule struct {
@@ -57,7 +57,7 @@ type PolicyConfig struct {
 
 type DetectionConfig struct {
 	Loop        LoopDetectionConfig   `yaml:"loop"`
-	CostAnomaly CostAnomalyConfig    `yaml:"cost_anomaly"`
+	CostAnomaly CostAnomalyConfig     `yaml:"cost_anomaly"`
 	Spiral      SpiralDetectionConfig `yaml:"spiral"`
 }
 

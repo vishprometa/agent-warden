@@ -9,14 +9,14 @@ import (
 type ActionType string
 
 const (
-	ActionLLMChat      ActionType = "llm.chat"
-	ActionLLMEmbed     ActionType = "llm.embedding"
-	ActionToolCall     ActionType = "tool.call"
-	ActionAPIRequest   ActionType = "api.request"
-	ActionDBQuery      ActionType = "db.query"
-	ActionFileWrite    ActionType = "file.write"
-	ActionCodeExec     ActionType = "code.exec"
-	ActionMCPTool      ActionType = "mcp.tool"
+	ActionLLMChat    ActionType = "llm.chat"
+	ActionLLMEmbed   ActionType = "llm.embedding"
+	ActionToolCall   ActionType = "tool.call"
+	ActionAPIRequest ActionType = "api.request"
+	ActionDBQuery    ActionType = "db.query"
+	ActionFileWrite  ActionType = "file.write"
+	ActionCodeExec   ActionType = "code.exec"
+	ActionMCPTool    ActionType = "mcp.tool"
 )
 
 // TraceStatus represents the policy evaluation result.
@@ -145,13 +145,13 @@ type SessionFilter struct {
 
 // AgentStats holds aggregated metrics for an agent.
 type AgentStats struct {
-	AgentID         string  `json:"agent_id"`
-	TotalSessions   int     `json:"total_sessions"`
-	ActiveSessions  int     `json:"active_sessions"`
-	TotalCost       float64 `json:"total_cost"`
-	TotalActions    int     `json:"total_actions"`
-	TotalViolations int     `json:"total_violations"`
+	AgentID           string  `json:"agent_id"`
+	TotalSessions     int     `json:"total_sessions"`
+	ActiveSessions    int     `json:"active_sessions"`
+	TotalCost         float64 `json:"total_cost"`
+	TotalActions      int     `json:"total_actions"`
+	TotalViolations   int     `json:"total_violations"`
 	AvgCostPerSession float64 `json:"avg_cost_per_session"`
-	CompletionRate  float64 `json:"completion_rate"`
-	ErrorRate       float64 `json:"error_rate"`
+	CompletionRate    float64 `json:"completion_rate"`
+	ErrorRate         float64 `json:"error_rate"`
 }

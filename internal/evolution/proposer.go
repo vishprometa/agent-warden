@@ -80,13 +80,13 @@ NEW_PROMPT_MD:
 	if input.Analysis != nil {
 		userMsg.WriteString("\n### Failure Patterns\n")
 		for _, pattern := range input.Analysis.FailurePatterns {
-			userMsg.WriteString(fmt.Sprintf("- %s\n", pattern))
+			fmt.Fprintf(&userMsg, "- %s\n", pattern)
 		}
 		userMsg.WriteString("\n### Recommendations\n")
 		for _, rec := range input.Analysis.Recommendations {
-			userMsg.WriteString(fmt.Sprintf("- %s\n", rec))
+			fmt.Fprintf(&userMsg, "- %s\n", rec)
 		}
-		userMsg.WriteString(fmt.Sprintf("\n### Priority: %s\n", input.Analysis.Priority))
+		fmt.Fprintf(&userMsg, "\n### Priority: %s\n", input.Analysis.Priority)
 	}
 
 	response, err := p.llm.Chat(ctx, systemPrompt, userMsg.String())

@@ -16,8 +16,8 @@ type costEntry struct {
 
 // CostAnomalyDetector detects abnormal cost velocity spikes.
 type CostAnomalyDetector struct {
-	mu      sync.Mutex
-	config  config.CostAnomalyConfig
+	mu     sync.Mutex
+	config config.CostAnomalyConfig
 	// sessionID → cost entries
 	history map[string][]costEntry
 }

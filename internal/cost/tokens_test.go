@@ -222,9 +222,9 @@ func TestEstimateTokens(t *testing.T) {
 		want int
 	}{
 		{"empty string", "", 0},
-		{"short text", "hi", 1},       // (2+3)/4 = 1
-		{"4 chars", "test", 1},        // (4+3)/4 = 1
-		{"8 chars", "testtest", 2},    // (8+3)/4 = 2
+		{"short text", "hi", 1},         // (2+3)/4 = 1
+		{"4 chars", "test", 1},          // (4+3)/4 = 1
+		{"8 chars", "testtest", 2},      // (8+3)/4 = 2
 		{"12 chars", "hello, world", 3}, // (12+3)/4 = 3
 	}
 

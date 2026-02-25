@@ -7,11 +7,11 @@ import (
 
 // Tracker accumulates cost per session and per agent.
 type Tracker struct {
-	mu            sync.RWMutex
-	sessionCosts  map[string]float64 // sessionID → total USD
-	agentCosts    map[string]float64 // agentID → total USD
-	tokenCounter  *TokenCounter
-	logger        *slog.Logger
+	mu           sync.RWMutex
+	sessionCosts map[string]float64 // sessionID → total USD
+	agentCosts   map[string]float64 // agentID → total USD
+	tokenCounter *TokenCounter
+	logger       *slog.Logger
 }
 
 // NewTracker creates a new cost tracker.

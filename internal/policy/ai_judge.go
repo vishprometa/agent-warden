@@ -142,7 +142,7 @@ func buildJudgeUserPrompt(input AIJudgeInput) string {
 // judgeChatRequest is the OpenAI-compatible chat completions request body.
 type judgeChatRequest struct {
 	Model       string             `json:"model"`
-	Messages    []judgeChatMessage  `json:"messages"`
+	Messages    []judgeChatMessage `json:"messages"`
 	Temperature float64            `json:"temperature"`
 	MaxTokens   int                `json:"max_tokens,omitempty"`
 }
@@ -203,7 +203,7 @@ func (j *AIJudge) callLLM(ctx context.Context, model, systemPrompt, userPrompt s
 	if err != nil {
 		return "", fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result judgeChatResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {

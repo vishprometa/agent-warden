@@ -53,11 +53,11 @@ type Store interface {
 
 // SystemStats holds aggregate system metrics.
 type SystemStats struct {
-	TotalTraces     int64   `json:"total_traces"`
-	TotalSessions   int64   `json:"total_sessions"`
-	ActiveSessions  int64   `json:"active_sessions"`
-	TotalAgents     int64   `json:"total_agents"`
-	TotalCost       float64 `json:"total_cost"`
-	TotalViolations int64   `json:"total_violations"`
-	PendingApprovals int64  `json:"pending_approvals"`
+	TotalTraces      int64   `json:"total_traces"`
+	TotalSessions    int64   `json:"total_sessions"`
+	ActiveSessions   int64   `json:"active_sessions"`
+	TotalAgents      int64   `json:"total_agents"`
+	TotalCost        float64 `json:"total_cost"`
+	TotalViolations  int64   `json:"total_violations"`
+	PendingApprovals int64   `json:"pending_approvals"`
 }

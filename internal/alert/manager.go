@@ -10,8 +10,8 @@ import (
 
 // Alert represents a notification to be sent.
 type Alert struct {
-	Type      string                 `json:"type"`      // policy_violation, budget_breach, loop_detected, cost_anomaly, spiral, evolution
-	Severity  string                 `json:"severity"`  // info, warning, critical
+	Type      string                 `json:"type"`     // policy_violation, budget_breach, loop_detected, cost_anomaly, spiral, evolution
+	Severity  string                 `json:"severity"` // info, warning, critical
 	Title     string                 `json:"title"`
 	Message   string                 `json:"message"`
 	AgentID   string                 `json:"agent_id,omitempty"`

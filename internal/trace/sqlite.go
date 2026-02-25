@@ -198,7 +198,7 @@ func (s *SQLiteStore) ListTraces(filter TraceFilter) ([]*Trace, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var traces []*Trace
 	for rows.Next() {
@@ -228,7 +228,7 @@ func (s *SQLiteStore) SearchTraces(query string, limit int) ([]*Trace, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var traces []*Trace
 	for rows.Next() {
@@ -303,7 +303,7 @@ func (s *SQLiteStore) ListSessions(filter SessionFilter) ([]*Session, int, error
 	if err != nil {
 		return nil, 0, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var sessions []*Session
 	for rows.Next() {
@@ -379,7 +379,7 @@ func (s *SQLiteStore) ListAgents() ([]*Agent, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var agents []*Agent
 	for rows.Next() {
@@ -398,19 +398,19 @@ func (s *SQLiteStore) ListAgents() ([]*Agent, error) {
 func (s *SQLiteStore) GetAgentStats(agentID string) (*AgentStats, error) {
 	stats := &AgentStats{AgentID: agentID}
 
-	s.db.QueryRow("SELECT COUNT(*) FROM sessions WHERE agent_id = ?", agentID).Scan(&stats.TotalSessions)
-	s.db.QueryRow("SELECT COUNT(*) FROM sessions WHERE agent_id = ? AND status = 'active'", agentID).Scan(&stats.ActiveSessions)
-	s.db.QueryRow("SELECT COALESCE(SUM(total_cost), 0) FROM sessions WHERE agent_id = ?", agentID).Scan(&stats.TotalCost)
-	s.db.QueryRow("SELECT COALESCE(SUM(action_count), 0) FROM sessions WHERE agent_id = ?", agentID).Scan(&stats.TotalActions)
-	s.db.QueryRow("SELECT COUNT(*) FROM violations WHERE agent_id = ?", agentID).Scan(&stats.TotalViolations)
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM sessions WHERE agent_id = ?", agentID).Scan(&stats.TotalSessions)
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM sessions WHERE agent_id = ? AND status = 'active'", agentID).Scan(&stats.ActiveSessions)
+	_ = s.db.QueryRow("SELECT COALESCE(SUM(total_cost), 0) FROM sessions WHERE agent_id = ?", agentID).Scan(&stats.TotalCost)
+	_ = s.db.QueryRow("SELECT COALESCE(SUM(action_count), 0) FROM sessions WHERE agent_id = ?", agentID).Scan(&stats.TotalActions)
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM violations WHERE agent_id = ?", agentID).Scan(&stats.TotalViolations)
 
 	if stats.TotalSessions > 0 {
 		stats.AvgCostPerSession = stats.TotalCost / float64(stats.TotalSessions)
 		var completed int
-		s.db.QueryRow("SELECT COUNT(*) FROM sessions WHERE agent_id = ? AND status = 'completed'", agentID).Scan(&completed)
+		_ = s.db.QueryRow("SELECT COUNT(*) FROM sessions WHERE agent_id = ? AND status = 'completed'", agentID).Scan(&completed)
 		stats.CompletionRate = float64(completed) / float64(stats.TotalSessions)
 		var terminated int
-		s.db.QueryRow("SELECT COUNT(*) FROM sessions WHERE agent_id = ? AND status = 'terminated'", agentID).Scan(&terminated)
+		_ = s.db.QueryRow("SELECT COUNT(*) FROM sessions WHERE agent_id = ? AND status = 'terminated'", agentID).Scan(&terminated)
 		stats.ErrorRate = float64(terminated) / float64(stats.TotalSessions)
 	}
 
@@ -458,7 +458,7 @@ func (s *SQLiteStore) ListAgentVersions(agentID string) ([]*AgentVersion, error)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var versions []*AgentVersion
 	for rows.Next() {
@@ -505,7 +505,7 @@ func (s *SQLiteStore) ListPendingApprovals() ([]*Approval, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var approvals []*Approval
 	for rows.Next() {
@@ -554,7 +554,7 @@ func (s *SQLiteStore) ListViolations(agentID string, limit int) ([]*Violation, e
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var violations []*Violation
 	for rows.Next() {
@@ -584,7 +584,7 @@ func (s *SQLiteStore) VerifyHashChain(sessionID string) (bool, int, error) {
 	if err != nil {
 		return false, 0, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var traces []*Trace
 	for rows.Next() {
@@ -606,13 +606,13 @@ func (s *SQLiteStore) VerifyHashChain(sessionID string) (bool, int, error) {
 
 func (s *SQLiteStore) GetSystemStats() (*SystemStats, error) {
 	stats := &SystemStats{}
-	s.db.QueryRow("SELECT COUNT(*) FROM traces").Scan(&stats.TotalTraces)
-	s.db.QueryRow("SELECT COUNT(*) FROM sessions").Scan(&stats.TotalSessions)
-	s.db.QueryRow("SELECT COUNT(*) FROM sessions WHERE status = 'active'").Scan(&stats.ActiveSessions)
-	s.db.QueryRow("SELECT COUNT(*) FROM agents").Scan(&stats.TotalAgents)
-	s.db.QueryRow("SELECT COALESCE(SUM(total_cost), 0) FROM sessions").Scan(&stats.TotalCost)
-	s.db.QueryRow("SELECT COUNT(*) FROM violations").Scan(&stats.TotalViolations)
-	s.db.QueryRow("SELECT COUNT(*) FROM approvals WHERE status = 'pending'").Scan(&stats.PendingApprovals)
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM traces").Scan(&stats.TotalTraces)
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM sessions").Scan(&stats.TotalSessions)
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM sessions WHERE status = 'active'").Scan(&stats.ActiveSessions)
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM agents").Scan(&stats.TotalAgents)
+	_ = s.db.QueryRow("SELECT COALESCE(SUM(total_cost), 0) FROM sessions").Scan(&stats.TotalCost)
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM violations").Scan(&stats.TotalViolations)
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM approvals WHERE status = 'pending'").Scan(&stats.PendingApprovals)
 	return stats, nil
 }
 

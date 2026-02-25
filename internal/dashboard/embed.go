@@ -38,7 +38,7 @@ func Handler() http.Handler {
 			fileServer.ServeHTTP(w, r)
 			return
 		}
-		f.Close()
+		_ = f.Close()
 
 		// Serve the actual file.
 		r.URL.Path = path

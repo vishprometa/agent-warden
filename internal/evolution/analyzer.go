@@ -93,13 +93,13 @@ ANALYSIS:
 	userMsg.WriteString("\n\n## Performance Metrics\n")
 
 	if input.Metrics != nil {
-		userMsg.WriteString(fmt.Sprintf("- Completion Rate: %.2f%%\n", input.Metrics.CompletionRate*100))
-		userMsg.WriteString(fmt.Sprintf("- Error Rate: %.2f%%\n", input.Metrics.ErrorRate*100))
-		userMsg.WriteString(fmt.Sprintf("- Human Override Rate: %.2f%%\n", input.Metrics.HumanOverrideRate*100))
-		userMsg.WriteString(fmt.Sprintf("- Cost Per Task: $%.4f\n", input.Metrics.CostPerTask))
-		userMsg.WriteString(fmt.Sprintf("- Avg Latency: %.0fms\n", input.Metrics.AvgLatency))
-		userMsg.WriteString(fmt.Sprintf("- Total Sessions: %d\n", input.Metrics.TotalSessions))
-		userMsg.WriteString(fmt.Sprintf("- Window: %s\n", input.Metrics.Window))
+		fmt.Fprintf(&userMsg, "- Completion Rate: %.2f%%\n", input.Metrics.CompletionRate*100)
+		fmt.Fprintf(&userMsg, "- Error Rate: %.2f%%\n", input.Metrics.ErrorRate*100)
+		fmt.Fprintf(&userMsg, "- Human Override Rate: %.2f%%\n", input.Metrics.HumanOverrideRate*100)
+		fmt.Fprintf(&userMsg, "- Cost Per Task: $%.4f\n", input.Metrics.CostPerTask)
+		fmt.Fprintf(&userMsg, "- Avg Latency: %.0fms\n", input.Metrics.AvgLatency)
+		fmt.Fprintf(&userMsg, "- Total Sessions: %d\n", input.Metrics.TotalSessions)
+		fmt.Fprintf(&userMsg, "- Window: %s\n", input.Metrics.Window)
 	} else {
 		userMsg.WriteString("No metrics available.\n")
 	}
@@ -109,19 +109,19 @@ ANALYSIS:
 		userMsg.WriteString("No recent failures.\n")
 	}
 	for i, t := range input.RecentFailures {
-		userMsg.WriteString(fmt.Sprintf("\n### Failure %d\n", i+1))
-		userMsg.WriteString(fmt.Sprintf("- Trace ID: %s\n", t.ID))
-		userMsg.WriteString(fmt.Sprintf("- Action: %s / %s\n", t.ActionType, t.ActionName))
-		userMsg.WriteString(fmt.Sprintf("- Status: %s\n", t.Status))
-		userMsg.WriteString(fmt.Sprintf("- Policy: %s\n", t.PolicyName))
-		userMsg.WriteString(fmt.Sprintf("- Reason: %s\n", t.PolicyReason))
-		userMsg.WriteString(fmt.Sprintf("- Timestamp: %s\n", t.Timestamp.Format(time.RFC3339)))
+		fmt.Fprintf(&userMsg, "\n### Failure %d\n", i+1)
+		fmt.Fprintf(&userMsg, "- Trace ID: %s\n", t.ID)
+		fmt.Fprintf(&userMsg, "- Action: %s / %s\n", t.ActionType, t.ActionName)
+		fmt.Fprintf(&userMsg, "- Status: %s\n", t.Status)
+		fmt.Fprintf(&userMsg, "- Policy: %s\n", t.PolicyName)
+		fmt.Fprintf(&userMsg, "- Reason: %s\n", t.PolicyReason)
+		fmt.Fprintf(&userMsg, "- Timestamp: %s\n", t.Timestamp.Format(time.RFC3339))
 		if len(t.RequestBody) > 0 && string(t.RequestBody) != "null" {
 			body := string(t.RequestBody)
 			if len(body) > 1000 {
 				body = body[:1000] + "...[truncated]"
 			}
-			userMsg.WriteString(fmt.Sprintf("- Request (truncated): %s\n", body))
+			fmt.Fprintf(&userMsg, "- Request (truncated): %s\n", body)
 		}
 	}
 
@@ -212,10 +212,10 @@ func (a *Analyzer) GetMetrics(agentID string, window time.Duration) (*AgentMetri
 	}
 
 	var (
-		errorCount    int
-		approvedCount int
-		totalLatency  float64
-		totalCost     float64
+		errorCount        int
+		approvedCount     int
+		totalLatency      float64
+		totalCost         float64
 		completedSessions int
 	)
 

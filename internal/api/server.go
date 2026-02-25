@@ -14,14 +14,14 @@ import (
 
 // Server is the management API + dashboard server.
 type Server struct {
-	config    config.ServerConfig
-	store     trace.Store
-	cfgLoader *config.Loader
-	approvals *approval.Queue
-	wsHub     *WebSocketHub
-	mux       *http.ServeMux
+	config     config.ServerConfig
+	store      trace.Store
+	cfgLoader  *config.Loader
+	approvals  *approval.Queue
+	wsHub      *WebSocketHub
+	mux        *http.ServeMux
 	httpServer *http.Server
-	logger    *slog.Logger
+	logger     *slog.Logger
 }
 
 // NewServer creates a new management API server.

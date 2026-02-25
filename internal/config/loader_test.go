@@ -227,10 +227,10 @@ func TestLoader_ReloadWithoutLoad(t *testing.T) {
 
 func TestSubstituteEnvVars(t *testing.T) {
 	// Set test environment variable
-	os.Setenv("TEST_AW_PORT", "9999")
-	os.Setenv("TEST_AW_SECRET", "my-secret")
-	defer os.Unsetenv("TEST_AW_PORT")
-	defer os.Unsetenv("TEST_AW_SECRET")
+	t.Setenv("TEST_AW_PORT", "9999")
+	t.Setenv("TEST_AW_SECRET", "my-secret")
+	
+	
 
 	tests := []struct {
 		name  string
@@ -280,8 +280,7 @@ func TestSubstituteEnvVars(t *testing.T) {
 }
 
 func TestSubstituteEnvVars_InConfigLoad(t *testing.T) {
-	os.Setenv("TEST_AW_CFG_PORT", "7777")
-	defer os.Unsetenv("TEST_AW_CFG_PORT")
+	t.Setenv("TEST_AW_CFG_PORT", "7777")
 
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "agentwarden.yaml")

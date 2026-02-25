@@ -23,11 +23,11 @@ type PlaybookExecutor struct {
 // PlaybookInput contains the detection context sent to the LLM along with
 // the playbook markdown content.
 type PlaybookInput struct {
-	DetectionType string                 // "loop", "spiral", "budget_breach", "drift"
-	ActionType    string                 // what was being done (e.g. "tool.call")
-	ActionName    string                 // specific action (e.g. "shell_exec")
-	RepeatCount   int                    // how many repeats for loops
-	Window        string                 // time window for the detection
+	DetectionType string // "loop", "spiral", "budget_breach", "drift"
+	ActionType    string // what was being done (e.g. "tool.call")
+	ActionName    string // specific action (e.g. "shell_exec")
+	RepeatCount   int    // how many repeats for loops
+	Window        string // time window for the detection
 	SessionID     string
 	AgentID       string
 	RecentActions []RecentAction         // last N actions for context
@@ -247,7 +247,7 @@ func (p *PlaybookExecutor) callLLM(ctx context.Context, systemPrompt, userPrompt
 	if err != nil {
 		return "", fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result chatCompletionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {

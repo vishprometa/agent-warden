@@ -70,10 +70,10 @@ func (d *SpiralDetector) Check(event ActionEvent) *Event {
 			Message: fmt.Sprintf("Conversation spiral: %d consecutive outputs with %.0f%% average similarity (threshold: %.0f%%)",
 				window, avgSimilarity*100, d.config.SimilarityThreshold*100),
 			Details: map[string]interface{}{
-				"window":          window,
-				"avg_similarity":  avgSimilarity,
-				"threshold":       d.config.SimilarityThreshold,
-				"consecutive":     window,
+				"window":         window,
+				"avg_similarity": avgSimilarity,
+				"threshold":      d.config.SimilarityThreshold,
+				"consecutive":    window,
 			},
 		}
 	}

@@ -10,10 +10,10 @@ import (
 
 // LoopDetector detects repeated identical actions within a sliding window.
 type LoopDetector struct {
-	mu        sync.Mutex
-	config    config.LoopDetectionConfig
+	mu     sync.Mutex
+	config config.LoopDetectionConfig
 	// sessionID → signature → timestamps
-	windows   map[string]map[string][]time.Time
+	windows map[string]map[string][]time.Time
 }
 
 // NewLoopDetector creates a new loop detector.

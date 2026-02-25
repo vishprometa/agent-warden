@@ -140,7 +140,7 @@ func main() {
 			if err != nil {
 				return fmt.Errorf("failed to connect to AgentWarden: %w", err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			if resp.StatusCode == 200 {
 				fmt.Println("✓ Policies reloaded")
 			} else {
@@ -159,9 +159,9 @@ func main() {
 			if err != nil {
 				return fmt.Errorf("failed to connect: %w", err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			var result map[string]interface{}
-			decodeJSON(resp, &result)
+			_ = decodeJSON(resp, &result)
 			policies, _ := result["policies"].([]interface{})
 			if len(policies) == 0 {
 				fmt.Println("No policies loaded.")
@@ -223,9 +223,11 @@ func main() {
 			if err != nil {
 				return fmt.Errorf("failed to connect: %w", err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			var result map[string]interface{}
-			decodeJSON(resp, &result)
+			if err := decodeJSON(resp, &result); err != nil {
+				return fmt.Errorf("failed to decode response: %w", err)
+			}
 			if valid, _ := result["valid"].(bool); valid {
 				fmt.Printf("✓ Hash chain intact for session %s (%v traces verified)\n", args[0], result["verified_count"])
 			} else {
@@ -270,9 +272,11 @@ func main() {
 			if err != nil {
 				return fmt.Errorf("failed to connect: %w", err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			var result map[string]interface{}
-			decodeJSON(resp, &result)
+			if err := decodeJSON(resp, &result); err != nil {
+				return fmt.Errorf("failed to decode response: %w", err)
+			}
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
 			return enc.Encode(result)
@@ -289,7 +293,7 @@ func main() {
 			if err != nil {
 				return fmt.Errorf("failed to connect: %w", err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			fmt.Printf("✓ Agent %s paused\n", args[0])
 			return nil
 		},
@@ -305,7 +309,7 @@ func main() {
 			if err != nil {
 				return fmt.Errorf("failed to connect: %w", err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			fmt.Printf("✓ Agent %s resumed\n", args[0])
 			return nil
 		},
@@ -322,7 +326,7 @@ func main() {
 			if err != nil {
 				return fmt.Errorf("failed to connect: %w", err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			fmt.Printf("✓ Session %s terminated\n", args[0])
 			return nil
 		},
@@ -345,9 +349,9 @@ func main() {
 			if err != nil {
 				return fmt.Errorf("failed to connect: %w", err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			var result map[string]interface{}
-			decodeJSON(resp, &result)
+			_ = decodeJSON(resp, &result)
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
 			return enc.Encode(result)
@@ -365,9 +369,9 @@ func main() {
 			if err != nil {
 				return fmt.Errorf("failed to connect: %w", err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			var result map[string]interface{}
-			decodeJSON(resp, &result)
+			_ = decodeJSON(resp, &result)
 			fmt.Printf("✓ Evolution triggered. Status: %v\n", result["status"])
 			return nil
 		},
@@ -383,9 +387,9 @@ func main() {
 			if err != nil {
 				return fmt.Errorf("failed to connect: %w", err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			var result map[string]interface{}
-			decodeJSON(resp, &result)
+			_ = decodeJSON(resp, &result)
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
 			return enc.Encode(result)
@@ -430,7 +434,7 @@ func main() {
 			if err != nil {
 				return fmt.Errorf("failed to connect: %w", err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			fmt.Printf("✓ Candidate promoted for agent %s\n", args[0])
 			return nil
 		},
@@ -446,7 +450,7 @@ func main() {
 			if err != nil {
 				return fmt.Errorf("failed to connect: %w", err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			fmt.Printf("✓ Rolled back agent %s to previous version\n", args[0])
 			return nil
 		},
@@ -521,7 +525,7 @@ func runStart(configFile string, portOverride int, devMode bool) error {
 	if err := store.Initialize(); err != nil {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Initialize MD loader
 	mdLoader := mdloader.NewLoader(cfg.AgentsDir, cfg.PoliciesDir, cfg.PlaybooksDir)
@@ -532,7 +536,7 @@ func runStart(configFile string, portOverride int, devMode bool) error {
 		if err := mdWatcher.Start(); err != nil {
 			logger.Warn("failed to start MD file watcher", "error", err)
 		} else {
-			defer mdWatcher.Stop()
+			defer func() { _ = mdWatcher.Stop() }()
 		}
 	}
 
@@ -629,11 +633,13 @@ func runStart(configFile string, portOverride int, devMode bool) error {
 
 	// Hot-reload config file
 	if configFile != "" {
-		policyLoader.WatchConfig(configFile, func(path string) {
+		if err := policyLoader.WatchConfig(configFile, func(path string) {
 			if err := policyEngine.ReloadPolicies(); err != nil {
 				logger.Error("hot-reload failed", "error", err)
 			}
-		})
+		}); err != nil {
+			logger.Error("failed to watch config for hot-reload", "error", err)
+		}
 		defer policyLoader.StopWatch()
 	}
 
@@ -647,7 +653,7 @@ func runStart(configFile string, portOverride int, devMode bool) error {
 		grpcEventServer.Stop()
 		shutCtx, shutCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer shutCancel()
-		httpServer.Shutdown(shutCtx)
+		_ = httpServer.Shutdown(shutCtx)
 	}()
 
 	// Start gRPC server
@@ -785,7 +791,7 @@ func runPolicyValidate(configFile string) error {
 		path = findConfigFile()
 	}
 	if path == "" {
-		return fmt.Errorf("no config file found. Run 'agentwarden init' to create one.")
+		return fmt.Errorf("no config file found, run 'agentwarden init' to create one")
 	}
 
 	loader := config.NewLoader()
@@ -879,7 +885,7 @@ func runDoctor(port int, configFile string) error {
 	if err != nil {
 		fmt.Printf("✗ AgentWarden not running on port %d\n", p)
 	} else {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		fmt.Printf("✓ HTTP server running on port %d\n", p)
 	}
 
@@ -925,9 +931,9 @@ func runAgentShow(port int, agentID string) error {
 		fmt.Printf("(Server not running — showing local files only)\n")
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var result map[string]interface{}
-	decodeJSON(resp, &result)
+	_ = decodeJSON(resp, &result)
 
 	if stats, ok := result["stats"].(map[string]interface{}); ok {
 		fmt.Println("Metrics:")
@@ -947,7 +953,7 @@ func runStatus(port int) error {
 		fmt.Printf("AgentWarden is not running on port %d\n", p)
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var stats map[string]interface{}
 	if err := decodeJSON(resp, &stats); err != nil {
@@ -974,7 +980,7 @@ func runTraceList(port int, cmd *cobra.Command) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result map[string]interface{}
 	if err := decodeJSON(resp, &result); err != nil {
@@ -1004,7 +1010,7 @@ func runTraceShow(port int, sessionID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result map[string]interface{}
 	if err := decodeJSON(resp, &result); err != nil {
@@ -1034,10 +1040,10 @@ func runTraceSearch(port int, query string) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result map[string]interface{}
-	decodeJSON(resp, &result)
+	_ = decodeJSON(resp, &result)
 
 	traces, ok := result["traces"].([]interface{})
 	if !ok || len(traces) == 0 {
@@ -1059,10 +1065,10 @@ func runAgentList(port int) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result map[string]interface{}
-	decodeJSON(resp, &result)
+	_ = decodeJSON(resp, &result)
 
 	agents, ok := result["agents"].([]interface{})
 	if !ok || len(agents) == 0 {
@@ -1097,7 +1103,7 @@ func runMock(port int) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect (is AgentWarden running?): %w", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	fmt.Println("  ✓ Started session ses_mock001")
 
 	// Send some actions
@@ -1124,8 +1130,8 @@ func runMock(port int) error {
 			continue
 		}
 		var verdict map[string]interface{}
-		decodeJSON(resp, &verdict)
-		resp.Body.Close()
+		_ = decodeJSON(resp, &verdict)
+		_ = resp.Body.Close()
 		fmt.Printf("  → %s → %v\n", action["name"], verdict["verdict"])
 	}
 

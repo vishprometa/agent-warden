@@ -14,11 +14,11 @@ import (
 type PolicyCategory string
 
 const (
-	CategoryBudget      PolicyCategory = "budget"
-	CategoryRateLimit   PolicyCategory = "rate_limit"
-	CategoryCEL         PolicyCategory = "cel"
-	CategoryAIJudge     PolicyCategory = "ai_judge"
-	CategoryApproval    PolicyCategory = "approval"
+	CategoryBudget    PolicyCategory = "budget"
+	CategoryRateLimit PolicyCategory = "rate_limit"
+	CategoryCEL       PolicyCategory = "cel"
+	CategoryAIJudge   PolicyCategory = "ai_judge"
+	CategoryApproval  PolicyCategory = "approval"
 )
 
 // CompiledPolicy wraps a PolicyConfig with pre-compiled evaluation artefacts.
@@ -150,7 +150,7 @@ func (l *Loader) WatchConfig(configPath string, onReload func(path string)) erro
 	// patterns (e.g. vim, nano).
 	dir := filepath.Dir(absPath)
 	if err := w.Add(dir); err != nil {
-		w.Close()
+		_ = w.Close()
 		return fmt.Errorf("failed to watch directory %s: %w", dir, err)
 	}
 
@@ -201,7 +201,7 @@ func (l *Loader) StopWatch() {
 
 func (l *Loader) stopWatchLocked() {
 	if l.watcher != nil {
-		l.watcher.Close()
+		_ = l.watcher.Close()
 		// Wait for the goroutine to exit.
 		if l.watchDone != nil {
 			<-l.watchDone

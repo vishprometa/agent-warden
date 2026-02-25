@@ -62,13 +62,13 @@ func (q *Queue) Submit(ctx context.Context, req *Request) (bool, error) {
 
 	// Persist to store
 	approval := &trace.Approval{
-		ID:            req.ID,
-		SessionID:     req.SessionID,
-		TraceID:       req.TraceID,
-		PolicyName:    req.PolicyName,
-		Status:        "pending",
-		CreatedAt:     req.CreatedAt,
-		TimeoutAt:     req.CreatedAt.Add(req.Timeout),
+		ID:         req.ID,
+		SessionID:  req.SessionID,
+		TraceID:    req.TraceID,
+		PolicyName: req.PolicyName,
+		Status:     "pending",
+		CreatedAt:  req.CreatedAt,
+		TimeoutAt:  req.CreatedAt.Add(req.Timeout),
 	}
 
 	if summary, err := json.Marshal(req.ActionSummary); err == nil {
@@ -175,7 +175,9 @@ func (q *Queue) checkTimeouts() {
 
 				// Update store
 				status := "timed_out"
-				q.store.ResolveApproval(id, status, "timeout")
+				if err := q.store.ResolveApproval(id, status, "timeout"); err != nil {
+						q.logger.Error("failed to resolve timed-out approval in store", "approval_id", id, "error", err)
+					}
 
 				// Notify waiting goroutine
 				req.result <- Result{Approved: approved, ResolvedBy: "timeout"}
@@ -195,5 +197,7 @@ func (q *Queue) cleanup(approvalID string) {
 	q.mu.Lock()
 	delete(q.pending, approvalID)
 	q.mu.Unlock()
-	q.store.ResolveApproval(approvalID, "timed_out", "context_cancelled")
+	if err := q.store.ResolveApproval(approvalID, "timed_out", "context_cancelled"); err != nil {
+		q.logger.Error("failed to resolve cancelled approval in store", "approval_id", approvalID, "error", err)
+	}
 }

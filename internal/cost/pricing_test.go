@@ -7,9 +7,9 @@ import (
 
 func TestGetPricing_KnownModels(t *testing.T) {
 	tests := []struct {
-		model         string
-		wantInput     float64
-		wantOutput    float64
+		model      string
+		wantInput  float64
+		wantOutput float64
 	}{
 		{"gpt-4", 30.00, 60.00},
 		{"gpt-4o", 2.50, 10.00},

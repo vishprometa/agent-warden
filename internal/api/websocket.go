@@ -43,7 +43,7 @@ func (h *WebSocketHub) Close() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for conn := range h.clients {
-		conn.Close()
+		_ = conn.Close()
 		delete(h.clients, conn)
 	}
 }
@@ -68,7 +68,7 @@ func (h *WebSocketHub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 			h.mu.Lock()
 			delete(h.clients, conn)
 			h.mu.Unlock()
-			conn.Close()
+			_ = conn.Close()
 			h.logger.Debug("websocket client disconnected", "remote", conn.RemoteAddr())
 		}()
 
@@ -102,7 +102,7 @@ func (h *WebSocketHub) Broadcast(data interface{}) {
 				h.mu.Lock()
 				delete(h.clients, c)
 				h.mu.Unlock()
-				c.Close()
+				_ = c.Close()
 			}(conn)
 		}
 	}

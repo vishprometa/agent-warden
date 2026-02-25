@@ -37,7 +37,7 @@ type EvolutionResult struct {
 	AgentID          string    `json:"agent_id"`
 	CurrentVersion   string    `json:"current_version"`
 	CandidateVersion string    `json:"candidate_version"`
-	Analysis         string    `json:"analysis"`       // LLM's analysis of failure patterns
+	Analysis         string    `json:"analysis"`        // LLM's analysis of failure patterns
 	ProposedDiff     string    `json:"proposed_diff"`   // what changed
 	ProposedPrompt   string    `json:"proposed_prompt"` // full new PROMPT.md content
 	Status           string    `json:"status"`          // "proposed", "shadow_testing", "promoted", "rejected"

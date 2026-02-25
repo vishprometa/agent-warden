@@ -32,7 +32,7 @@ type ShadowTest struct {
 type ShadowResult struct {
 	TraceID    string
 	ActionType string
-	Verdict    string  // allow, deny, etc.
+	Verdict    string // allow, deny, etc.
 	CostUSD    float64
 	LatencyMS  int
 	Success    bool

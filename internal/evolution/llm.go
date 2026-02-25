@@ -109,7 +109,7 @@ func (c *LLMClient) Chat(ctx context.Context, systemPrompt, userMessage string) 
 	if err != nil {
 		return "", fmt.Errorf("llm request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
