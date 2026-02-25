@@ -3,7 +3,7 @@
 ## Config
 - **Project**: /Users/vish/Developer/agentwarden
 - **Started**: 2026-02-25
-- **Iteration**: 3
+- **Iteration**: 6
 
 ## Task Backlog
 
@@ -11,7 +11,8 @@
 - [x] Fix `internal/dashboard/embed.go` — uses `//go:embed dist/*` but dist/ is gitignored. CI can't build without it. Add a placeholder or generate a stub embed for CI, or commit a minimal dist.
 - [x] Fix CI workflow `go-version: "1.26.0"` — doesn't exist. Change to `"1.25.x"` or `"stable"`.
 - [x] Fix golangci-lint version mismatch — Go 1.25 target needs a newer lint build. Pin `golangci-lint-action` version that supports Go 1.25.
-- [ ] Verify CI passes on push after fixes.
+- [x] Verify CI passes on push after fixes. CI infrastructure works (build ✓, test ✓), but code has 39 linting errors that need fixing.
+- [x] Fix golangci-lint errors: 35 errcheck violations (unchecked error returns) + 4 staticcheck violations (style issues)
 
 ### Priority 2 — Add Tests for Untested Packages (10 packages have zero tests)
 - [ ] Add tests for `internal/session/manager.go` — session create/get/end, concurrent access, metadata handling
@@ -49,10 +50,10 @@
 - [ ] Document what works and what's broken in `.claude-journal/learnings.md`
 
 ### Priority 6 — Deploy Docs to Vercel
-- [ ] Create a docs site project structure (pick framework: Docusaurus, VitePress, or plain HTML)
-- [ ] Move existing docs/*.md into the site
-- [ ] Deploy to Vercel using token
-- [ ] Add docs URL to README
+- [x] Create a docs site project structure (pick framework: Docusaurus, VitePress, or plain HTML)
+- [x] Move existing docs/*.md into the site
+- [x] Deploy to Vercel using token
+- [x] Add docs URL to README
 
 ### Priority 7 — SDK Hardening
 - [ ] Python SDK: Add retry with exponential backoff for HTTP transport
@@ -62,7 +63,7 @@
 - [ ] Both SDKs: Add `agentwarden.yaml` client-side config loading
 
 ### Priority 8 — Polish & Release Prep
-- [ ] Update README.md with current architecture, quickstart, badges
+- [x] Update README.md with current architecture, quickstart, badges
 - [ ] Add CONTRIBUTING.md
 - [ ] Add LICENSE check (currently MIT)
 - [ ] Create GitHub release with goreleaser
@@ -90,6 +91,36 @@
 - Using `latest` ensures compatibility with Go 1.25.x
 - Verified `go build ./...` and `go test ./...` both pass
 - Files changed: `.github/workflows/ci.yml`
+
+### Iteration 4
+- Verified CI infrastructure is working correctly
+- Checked GitHub Actions run 22384476878 (commit 2fd4d61)
+- Dashboard Build: ✓ PASSED (17s)
+- Test: ✓ PASSED (1m3s) — all existing tests pass in CI
+- Lint: ✗ FAILED — 39 linting errors found (35 errcheck + 4 staticcheck)
+- Build Go Binary: skipped (lint failed)
+- CI infrastructure fixes from iterations 1-3 are successful
+- Added new task to Priority 1: Fix golangci-lint errors
+- No files changed (verification only)
+
+### Iteration 5
+- Fixed ALL 39 golangci-lint violations across 13 files
+- 35 errcheck fixes: wrapped deferred Close() with `defer func() { _ = f.Close() }()`, wrapped non-deferred Close() with `_ = f.Close()`, wrapped important error returns with proper logging
+- 4 staticcheck fixes: replaced `WriteString(fmt.Sprintf(...))` with `fmt.Fprintf()` in evolution/analyzer.go and evolution/proposer.go
+- 6 test fixes in loader_test.go: migrated os.Setenv/os.Unsetenv to t.Setenv()
+- Verified: `golangci-lint run ./...` → 0 issues, `go build ./...` → PASS, `go test ./...` → PASS
+- Files changed: 13 files across cmd/, internal/api, internal/approval, internal/config, internal/dashboard, internal/policy, internal/server, internal/trace, internal/alert, internal/evolution
+
+### Iteration 6
+- Deployed docs to Vercel using VitePress
+- Created VitePress site in docs/ with .vitepress/config.ts
+- Created homepage (index.md) with hero section and feature grid
+- Created SDK doc pages: sdk-python.md, sdk-typescript.md
+- Created logo SVG and public/ directory
+- Deployed to https://agentwarden-docs.vercel.app (production)
+- Updated README.md with docs link, badges (CI, Docs, License)
+- Updated .gitignore for docs/.vitepress/dist/ and docs/.vitepress/cache/
+- Files changed: docs/*, README.md, .gitignore
 
 ## Bugs Found
 (none yet)
@@ -122,10 +153,36 @@ go build ./...  → ✅ PASS (no errors)
 go test ./...   → ✅ PASS (5 packages with tests all cached/passed)
 ```
 
+### Iteration 4
+```
+go build ./...  → ✅ PASS (no errors)
+go test ./...   → ✅ PASS (5 packages with tests all cached/passed)
+CI run 22384476878:
+  Dashboard Build → ✅ PASS (17s)
+  Test           → ✅ PASS (1m3s)
+  Lint           → ❌ FAIL (39 issues: 35 errcheck + 4 staticcheck)
+```
+
+### Iteration 5
+```
+golangci-lint run ./... → ✅ 0 issues (was 39)
+go build ./...  → ✅ PASS
+go test ./...   → ✅ PASS (5 packages with tests all passed)
+```
+
+### Iteration 6
+```
+VitePress build → ✅ 1.92s (9 pages: index, quickstart, config, architecture, policies, evolution, api-reference, sdk-python, sdk-typescript)
+Vercel deploy   → ✅ https://agentwarden-docs.vercel.app
+go build ./...  → ✅ PASS
+go test ./...   → ✅ PASS
+```
+
 ## Notes
-- CI is failing on 1 remaining issue: golangci-lint version mismatch
-- embed.go dist/ issue is FIXED (Iteration 1)
-- Go version issue is FIXED (Iteration 2)
-- 10 packages have zero tests — that's the biggest quality gap
-- No E2E integration test exists — we don't actually know if the full system works end-to-end
+- ALL CI issues are FIXED (embed.go dist/, Go version, golangci-lint version, 39 lint violations)
+- Docs deployed to https://agentwarden-docs.vercel.app (VitePress + Vercel)
+- README updated with badges and docs link
+- 10 packages still have zero tests — biggest quality gap
+- No E2E integration test exists — we don't know if the full system works end-to-end
 - OpenRouter key available at AGENTWARDEN_LLM_API_KEY for testing real LLM calls
+- P1 (CI) and P6 (Docs) are COMPLETE — loop should continue with P2 (tests)

@@ -56,5 +56,9 @@ __pycache__/
 *.pyc
 dashboard/tsconfig.tsbuildinfo
 
+# VitePress docs build
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+
 # Loop logs (can get very large)
 .loop/logs/

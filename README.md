@@ -1,6 +1,10 @@
 # AgentWarden
 
-**Runtime governance proxy for AI agents.** Observe. Enforce. Evolve.
+**Runtime governance for AI agents.** Observe. Enforce. Evolve.
+
+[![Docs](https://img.shields.io/badge/docs-agentwarden--docs.vercel.app-6366f1)](https://agentwarden-docs.vercel.app)
+[![CI](https://github.com/vishprometa/agent-warden/actions/workflows/ci.yml/badge.svg)](https://github.com/vishprometa/agent-warden/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 AgentWarden is a transparent HTTP proxy that sits between your AI agents and LLM providers, enforcing governance policies, tracking costs, detecting anomalies, and producing an immutable audit trail of every action.
 
@@ -233,6 +237,19 @@ make test
 # Build Docker image
 make docker
 ```
+
+## Documentation
+
+Full documentation is available at **[agentwarden-docs.vercel.app](https://agentwarden-docs.vercel.app)**:
+
+- [Quick Start Guide](https://agentwarden-docs.vercel.app/quickstart)
+- [Configuration Reference](https://agentwarden-docs.vercel.app/configuration)
+- [Policy Authoring](https://agentwarden-docs.vercel.app/policies)
+- [Architecture Deep Dive](https://agentwarden-docs.vercel.app/architecture)
+- [Self-Evolution Guide](https://agentwarden-docs.vercel.app/evolution)
+- [API Reference](https://agentwarden-docs.vercel.app/api-reference)
+- [Python SDK](https://agentwarden-docs.vercel.app/sdk-python)
+- [TypeScript SDK](https://agentwarden-docs.vercel.app/sdk-typescript)
 
 ## License
 
