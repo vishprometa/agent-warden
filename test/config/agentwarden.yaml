@@ -1,0 +1,120 @@
+# AgentWarden Test Configuration for Support Bot
+# This config demonstrates governance for a simple support bot agent
+
+server:
+  port: 6777
+  grpc_port: 6778
+  dashboard: true
+  log_level: info
+  cors: true                    # Enable CORS for local testing
+  fail_mode: closed             # Deny on error (safer for testing)
+
+# ─── Storage ───
+storage:
+  driver: sqlite
+  path: ./test-agentwarden.db   # Separate DB for test agents
+  retention: 168h               # 7 days (shorter for testing)
+  redaction:
+    - pattern: "sk-[a-zA-Z0-9]+"
+      replacement: "[REDACTED_KEY]"
+
+# ─── Directories ───
+agents_dir: ../agents           # Relative to test/config
+policies_dir: ./policies
+playbooks_dir: ./playbooks
+
+# ─── Policies ───
+policies:
+
+  # Cost limit policy (deny if session cost > $0.50)
+  - name: session-cost-limit
+    condition: session.cost > 0.50
+    effect: deny
+    message: "Session cost exceeded $0.50 limit"
+
+  # Daily agent budget (deny if agent's daily cost > $5.00)
+  - name: daily-agent-budget
+    condition: agent.daily_cost > 5.00
+    effect: terminate
+    message: "Agent daily budget of $5.00 exceeded"
+
+  # Model restriction (only allow gpt-4o-mini)
+  - name: allowed-models
+    condition: >
+      action.type == "llm.chat"
+      && action.params.model != "openai/gpt-4o-mini"
+    effect: deny
+    message: "Only openai/gpt-4o-mini is allowed for this agent"
+
+  # Rate limiting (max 30 LLM calls per minute)
+  - name: llm-rate-limit
+    condition: session.action_count("llm.chat", "60s") > 30
+    effect: throttle
+    delay: 2s
+    message: "Too many LLM calls, throttling for 2 seconds"
+
+  # Tool call rate limiting (max 50 tool calls per minute)
+  - name: tool-rate-limit
+    condition: session.action_count("tool.call", "60s") > 50
+    effect: throttle
+    delay: 1s
+    message: "Too many tool calls, throttling for 1 second"
+
+# ─── Detection ───
+detection:
+  # Loop detection (alert if same tool called > 5 times)
+  loop:
+    enabled: true
+    threshold: 5                # Alert after 5 identical actions
+    window: 60s
+    action: alert               # Just alert for now (don't pause agent)
+    fallback_action: alert
+    playbook_model: claude-haiku
+
+  # Cost anomaly detection
+  cost_anomaly:
+    enabled: true
+    multiplier: 10              # Alert if cost is 10x the average
+    action: alert
+    fallback_action: alert
+    playbook_model: claude-haiku
+
+  # Spiral detection (repetitive similar actions)
+  spiral:
+    enabled: true
+    similarity_threshold: 0.9
+    window: 5
+    action: alert
+    fallback_action: alert
+    playbook_model: claude-haiku
+
+# ─── Evolution ───
+evolution:
+  enabled: false                # Disabled for basic testing
+  model: claude-sonnet-4
+
+  scoring:
+    metrics: [task_completion_rate, error_rate, cost_per_task]
+    window: 168h                # 7 days
+
+  constraints:
+    - "cost_per_task must not increase by more than 20%"
+    - "task_completion_rate must not decrease"
+
+  shadow:
+    required: true
+    min_runs: 20                # Lower threshold for testing
+    success_threshold: 0.90     # 90% success rate
+
+  rollback:
+    auto: true
+    trigger: "error_rate increases by 15% within 1h"
+
+# ─── Alerts ───
+alerts:
+  slack:
+    webhook_url: ${SLACK_WEBHOOK_URL}
+    channel: "#agent-test-alerts"
+  webhook:
+    url: ""
+    secret: ""
