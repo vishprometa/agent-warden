@@ -25,12 +25,20 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Port      int    `yaml:"port"`
-	GRPCPort  int    `yaml:"grpc_port"`
-	Dashboard bool   `yaml:"dashboard"`
-	LogLevel  string `yaml:"log_level"`
-	CORS      bool   `yaml:"cors"`
-	FailMode  string `yaml:"fail_mode"` // "closed" = deny on error, "open" = allow on error
+	Port      int        `yaml:"port"`
+	GRPCPort  int        `yaml:"grpc_port"`
+	Dashboard bool       `yaml:"dashboard"`
+	LogLevel  string     `yaml:"log_level"`
+	CORS      bool       `yaml:"cors"`
+	FailMode  string     `yaml:"fail_mode"` // "closed" = deny on error, "open" = allow on error
+	Auth      AuthConfig `yaml:"auth"`
+}
+
+// AuthConfig controls API authentication. When disabled, a warning is logged
+// at startup to remind operators that the management API is unprotected.
+type AuthConfig struct {
+	Enabled  bool          `yaml:"enabled"`
+	TokenTTL time.Duration `yaml:"token_ttl"`
 }
 
 type StorageConfig struct {

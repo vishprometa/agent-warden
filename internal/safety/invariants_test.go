@@ -11,7 +11,7 @@ func TestEngine_SetAndGetInvariants(t *testing.T) {
 	invariants := []Invariant{
 		{
 			Description: "NEVER delete more than 5 emails",
-			Condition:   "session.action_count('email.delete') > 5",
+			Condition:   "action_count_in_window('email.delete', '3600s') > 5",
 			Effect:      "deny",
 			Enforcement: "proxy",
 		},

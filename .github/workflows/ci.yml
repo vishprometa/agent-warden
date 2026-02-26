@@ -18,7 +18,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25.x"
+          go-version: "1.24.x"
           cache: true
 
       - name: Run tests with coverage
@@ -44,12 +44,14 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25.x"
+          go-version: "1.24.x"
           cache: true
 
       - uses: golangci/golangci-lint-action@v7
         with:
           version: latest
+        env:
+          CGO_ENABLED: "1"
 
   build:
     name: Build Go Binary
@@ -60,7 +62,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25.x"
+          go-version: "1.24.x"
           cache: true
 
       - uses: actions/setup-node@v4

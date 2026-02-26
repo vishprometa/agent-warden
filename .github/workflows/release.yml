@@ -20,7 +20,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25.x"
+          go-version: "1.24.x"
           cache: true
 
       - uses: actions/setup-node@v4
@@ -40,6 +40,9 @@ jobs:
           rm -rf internal/dashboard/dist
           cp -r dashboard/dist internal/dashboard/dist
 
+      - name: Install C toolchain for CGO (sqlite3)
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+
       - name: Build binaries
         env:
           VERSION: ${{ github.ref_name }}
@@ -48,23 +51,26 @@ jobs:
         run: |
           LDFLAGS="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT:0:7} -X main.buildDate=${DATE}"
 
-          declare -A targets=(
-            ["linux-amd64"]="linux/amd64"
-            ["linux-arm64"]="linux/arm64"
-            ["darwin-amd64"]="darwin/amd64"
-            ["darwin-arm64"]="darwin/arm64"
-          )
-
           mkdir -p dist
 
-          for name in "${!targets[@]}"; do
-            IFS='/' read -r os arch <<< "${targets[$name]}"
-            echo "Building ${os}/${arch}..."
-            CGO_ENABLED=0 GOOS=${os} GOARCH=${arch} go build \
-              -ldflags="${LDFLAGS}" \
-              -o "dist/agentwarden-${name}" \
-              ./cmd/agentwarden
-          done
+          # Native builds (linux/amd64) — use host gcc
+          echo "Building linux/amd64..."
+          CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build \
+            -ldflags="${LDFLAGS}" \
+            -o "dist/agentwarden-linux-amd64" \
+            ./cmd/agentwarden
+
+          # Cross-compile linux/arm64 with aarch64 gcc
+          echo "Building linux/arm64..."
+          CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC=aarch64-linux-gnu-gcc go build \
+            -ldflags="${LDFLAGS}" \
+            -o "dist/agentwarden-linux-arm64" \
+            ./cmd/agentwarden
+
+          # macOS builds require CGO cross-compilation toolchains not
+          # available on Linux CI. These are built via GoReleaser on
+          # macOS runners or distributed as Docker images only.
+          # Skipping darwin builds from this workflow.
 
           # Create archives
           cd dist

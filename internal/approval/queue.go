@@ -38,6 +38,7 @@ type Queue struct {
 	store    trace.Store
 	alertMgr *alert.Manager
 	logger   *slog.Logger
+	done     chan struct{}
 }
 
 // NewQueue creates a new approval queue.
@@ -47,12 +48,18 @@ func NewQueue(store trace.Store, alertMgr *alert.Manager, logger *slog.Logger) *
 		store:    store,
 		alertMgr: alertMgr,
 		logger:   logger,
+		done:     make(chan struct{}),
 	}
 
 	// Start timeout checker
 	go q.checkTimeouts()
 
 	return q
+}
+
+// Close stops the background timeout checker goroutine.
+func (q *Queue) Close() {
+	close(q.done)
 }
 
 // Submit queues an action for approval and blocks until resolved or timed out.
@@ -164,7 +171,13 @@ func (q *Queue) checkTimeouts() {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
-	for range ticker.C {
+	for {
+		select {
+		case <-q.done:
+			return
+		case <-ticker.C:
+		}
+
 		q.mu.Lock()
 		now := time.Now()
 		for id, req := range q.pending {
@@ -176,8 +189,8 @@ func (q *Queue) checkTimeouts() {
 				// Update store
 				status := "timed_out"
 				if err := q.store.ResolveApproval(id, status, "timeout"); err != nil {
-						q.logger.Error("failed to resolve timed-out approval in store", "approval_id", id, "error", err)
-					}
+					q.logger.Error("failed to resolve timed-out approval in store", "approval_id", id, "error", err)
+				}
 
 				// Notify waiting goroutine
 				req.result <- Result{Approved: approved, ResolvedBy: "timeout"}

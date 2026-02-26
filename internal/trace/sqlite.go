@@ -164,14 +164,13 @@ func (s *SQLiteStore) GetTrace(id string) (*Trace, error) {
 		return nil, err
 	}
 
-	t.ActionName = policyName.String
+	t.ActionName = actionName.String
 	t.RequestBody = jsonOrNil(reqBody)
 	t.ResponseBody = jsonOrNil(respBody)
 	t.PolicyName = policyName.String
 	t.PolicyReason = policyReason.String
 	t.Model = model.String
 	t.Metadata = jsonOrNil(metadata)
-	t.ActionName = actionName.String
 
 	return t, nil
 }
@@ -221,9 +220,11 @@ func (s *SQLiteStore) SearchTraces(query string, limit int) ([]*Trace, error) {
 	if limit <= 0 {
 		limit = 50
 	}
-	pattern := "%" + query + "%"
+	// Escape SQL LIKE wildcards to prevent wildcard injection.
+	escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(query)
+	pattern := "%" + escaped + "%"
 	rows, err := s.db.Query(`SELECT id, session_id, agent_id, timestamp, action_type, action_name, status, latency_ms, cost_usd, model, hash
-		FROM traces WHERE request_body LIKE ? OR response_body LIKE ? OR action_name LIKE ?
+		FROM traces WHERE request_body LIKE ? ESCAPE '\' OR response_body LIKE ? ESCAPE '\' OR action_name LIKE ? ESCAPE '\'
 		ORDER BY timestamp DESC LIMIT ?`, pattern, pattern, pattern, limit)
 	if err != nil {
 		return nil, err

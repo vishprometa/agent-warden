@@ -27,6 +27,7 @@ import (
 	"github.com/agentwarden/agentwarden/internal/killswitch"
 	"github.com/agentwarden/agentwarden/internal/mdloader"
 	"github.com/agentwarden/agentwarden/internal/policy"
+	"github.com/agentwarden/agentwarden/internal/auth"
 	"github.com/agentwarden/agentwarden/internal/safety"
 	"github.com/agentwarden/agentwarden/internal/sanitize"
 	"github.com/agentwarden/agentwarden/internal/server"
@@ -176,7 +177,10 @@ func main() {
 			fmt.Printf("%-25s %-12s %-15s %s\n", "NAME", "TYPE", "EFFECT", "CONDITION")
 			fmt.Println(strings.Repeat("─", 80))
 			for _, p := range policies {
-				m := p.(map[string]interface{})
+				m, ok := p.(map[string]interface{})
+				if !ok {
+					continue
+				}
 				fmt.Printf("%-25v %-12v %-15v %v\n", m["name"], m["type"], m["effect"], truncate(str(m["condition"]), 30))
 			}
 			return nil
@@ -327,7 +331,10 @@ func main() {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p := resolvePort(port)
-			req, _ := http.NewRequest("DELETE", fmt.Sprintf("http://localhost:%d/api/sessions/%s", p, args[0]), nil)
+			req, err := http.NewRequest("DELETE", fmt.Sprintf("http://localhost:%d/api/sessions/%s", p, args[0]), nil)
+			if err != nil {
+				return fmt.Errorf("failed to create request: %w", err)
+			}
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				return fmt.Errorf("failed to connect: %w", err)
@@ -343,7 +350,16 @@ func main() {
 	// ─── evolve ───
 	evolveCmd := &cobra.Command{
 		Use:   "evolve",
-		Short: "Evolution engine commands",
+		Short: "Evolution engine commands (experimental)",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Println("WARNING: The evolution engine is experimental. API endpoints for")
+			fmt.Println("evolve status/trigger/promote/rollback are not yet registered on")
+			fmt.Println("the server. These commands will return 404 unless the evolution")
+			fmt.Println("API is explicitly enabled. Use 'evolve diff' and 'evolve history'")
+			fmt.Println("for local-only operations that work today.")
+			fmt.Println()
+			return nil
+		},
 	}
 
 	evolveStatusCmd := &cobra.Command{
@@ -624,11 +640,18 @@ func runStart(configFile string, portOverride int, devMode bool) error {
 	// Initialize kill switch (checked before ALL policy evaluation).
 	ks := killswitch.New(logger)
 
-	// Start file-based kill switch watcher.
+	// Start file-based kill switch watcher. The done channel is closed
+	// during graceful shutdown to stop the goroutine.
+	killSwitchDone := make(chan struct{})
 	go func() {
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
-		for range ticker.C {
+		for {
+			select {
+			case <-killSwitchDone:
+				return
+			case <-ticker.C:
+			}
 			ks.CheckFileKill()
 		}
 	}()
@@ -667,7 +690,7 @@ func runStart(configFile string, portOverride int, devMode bool) error {
 			AuthToken:  cfg.Adapters.OpenClaw.AuthToken,
 			ProxyPath:  cfg.Adapters.OpenClaw.ProxyPath,
 			Intercept:  cfg.Adapters.OpenClaw.Intercept,
-		}, logger)
+		}, cfg.Server.CORS, approvalQueue, logger)
 
 		// Start the adapter with a governance-aware evaluator.
 		go func() {
@@ -729,8 +752,26 @@ func runStart(configFile string, portOverride int, devMode bool) error {
 	_ = safetyEngine
 	_ = capEngine
 
+	// Initialize auth token manager.
+	var tokenManager *auth.TokenManager
+	if cfg.Server.Auth.Enabled {
+		ttl := cfg.Server.Auth.TokenTTL
+		if ttl <= 0 {
+			ttl = time.Hour
+		}
+		tokenManager = auth.NewTokenManager(ttl, logger)
+		bootstrapToken, err := tokenManager.CreateToken(auth.RoleAdmin, "", "")
+		if err != nil {
+			logger.Error("failed to create bootstrap admin token", "error", err)
+		} else {
+			fmt.Printf("  → Admin token: %s\n", bootstrapToken.Secret)
+		}
+	} else {
+		logger.Warn("API authentication is DISABLED — management API is unprotected. Set server.auth.enabled=true in config.")
+	}
+
 	// Initialize management API server
-	apiServer := api.NewServer(cfg.Server, store, cfgLoader, approvalQueue, logger)
+	apiServer := api.NewServer(cfg.Server, store, cfgLoader, approvalQueue, tokenManager, logger)
 
 	// Initialize gRPC event server
 	grpcEventServer := server.NewGRPCServer(
@@ -749,7 +790,10 @@ func runStart(configFile string, portOverride int, devMode bool) error {
 	if cfg.Server.Dashboard {
 		masterMux.Handle("/dashboard/", dashboard.Handler())
 	}
-	masterMux.Handle("/api/", apiServer.Handler())
+	// Wrap the API handler with a write timeout. The master http.Server has
+	// WriteTimeout=0 to support WebSocket connections, so we apply a per-handler
+	// timeout for regular HTTP API routes.
+	masterMux.Handle("/api/", http.TimeoutHandler(apiServer.Handler(), 30*time.Second, `{"error":"request timeout"}`))
 
 	// Event endpoints (SDK/webhook event receiver)
 	httpEventsServer.RegisterRoutes(masterMux)
@@ -875,6 +919,8 @@ func runStart(configFile string, portOverride int, devMode bool) error {
 	go func() {
 		<-sigCh
 		logger.Info("shutting down...")
+		close(killSwitchDone)
+		approvalQueue.Close()
 		grpcEventServer.Stop()
 		shutCtx, shutCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer shutCancel()
@@ -1221,7 +1267,10 @@ func runTraceList(port int, cmd *cobra.Command) error {
 	fmt.Printf("%-26s %-12s %-15s %-10s %-10s %s\n", "TIMESTAMP", "SESSION", "TYPE", "STATUS", "COST", "AGENT")
 	fmt.Println(strings.Repeat("─", 90))
 	for _, t := range traces {
-		m := t.(map[string]interface{})
+		m, ok := t.(map[string]interface{})
+		if !ok {
+			continue
+		}
 		fmt.Printf("%-26v %-12v %-15v %-10v $%-9.4f %v\n",
 			m["timestamp"], truncate(str(m["session_id"]), 12),
 			m["action_type"], m["status"], num(m["cost_usd"]), m["agent_id"])
@@ -1242,7 +1291,10 @@ func runTraceShow(port int, sessionID string) error {
 		return err
 	}
 
-	session := result["session"].(map[string]interface{})
+	session, ok := result["session"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("unexpected response format: missing session data")
+	}
 	fmt.Printf("Session: %s\n", session["id"])
 	fmt.Printf("Agent:   %s\n", session["agent_id"])
 	fmt.Printf("Status:  %s\n", session["status"])
@@ -1252,7 +1304,10 @@ func runTraceShow(port int, sessionID string) error {
 	traces, ok := result["traces"].([]interface{})
 	if ok {
 		for i, t := range traces {
-			m := t.(map[string]interface{})
+			m, mOk := t.(map[string]interface{})
+			if !mOk {
+				continue
+			}
 			fmt.Printf("  %d. [%s] %s %s → %s\n", i+1, m["timestamp"], m["action_type"], m["action_name"], m["status"])
 		}
 	}
@@ -1278,7 +1333,10 @@ func runTraceSearch(port int, query string) error {
 
 	fmt.Printf("Found %d matching traces:\n\n", len(traces))
 	for _, t := range traces {
-		m := t.(map[string]interface{})
+		m, ok := t.(map[string]interface{})
+		if !ok {
+			continue
+		}
 		fmt.Printf("  [%s] %s %s (session: %s)\n", m["timestamp"], m["action_type"], m["action_name"], m["session_id"])
 	}
 	return nil
@@ -1304,7 +1362,10 @@ func runAgentList(port int) error {
 	fmt.Printf("%-20s %-15s %-20s %s\n", "ID", "VERSION", "SESSIONS", "CREATED")
 	fmt.Println(strings.Repeat("─", 70))
 	for _, a := range agents {
-		m := a.(map[string]interface{})
+		m, ok := a.(map[string]interface{})
+		if !ok {
+			continue
+		}
 		fmt.Printf("%-20v %-15v %-20v %v\n", m["id"], m["current_version"], m["session_count"], m["created_at"])
 	}
 	return nil

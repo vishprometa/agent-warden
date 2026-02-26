@@ -34,12 +34,12 @@ policies:
 
   # ─── Rate Limiting ───
   - name: api-rate-limit
-    condition: session.action_count("api.call", "60s") > 100
+    condition: action_count_in_window("api.call", "60s") > 100
     effect: throttle
     delay: 5s
 
   - name: message-rate-limit
-    condition: session.action_count("message.send", "300s") > 25
+    condition: action_count_in_window("message.send", "300s") > 25
     effect: deny
     message: "Message rate limit exceeded (25 per 5 minutes)"
 

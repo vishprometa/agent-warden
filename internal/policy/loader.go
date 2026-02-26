@@ -104,7 +104,7 @@ func (l *Loader) LoadFromConfig(configs []config.PolicyConfig) ([]CompiledPolicy
 //  1. If Type == "ai-judge", it is an AI-evaluated policy.
 //  2. If Approvers is non-empty, it is an approval-gate policy.
 //  3. If the condition references session.cost with a comparison, treat as budget.
-//  4. If the condition references session.action_count with a function call, treat as rate limit.
+//  4. If the condition references action_count_in_window, treat as rate limit.
 //  5. Otherwise, treat as a generic CEL rule.
 //
 // Budget and rate-limit detection is heuristic -- the condition is still compiled

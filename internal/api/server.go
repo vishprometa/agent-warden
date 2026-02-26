@@ -5,23 +5,26 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/agentwarden/agentwarden/internal/approval"
+	"github.com/agentwarden/agentwarden/internal/auth"
 	"github.com/agentwarden/agentwarden/internal/config"
 	"github.com/agentwarden/agentwarden/internal/trace"
 )
 
 // Server is the management API + dashboard server.
 type Server struct {
-	config     config.ServerConfig
-	store      trace.Store
-	cfgLoader  *config.Loader
-	approvals  *approval.Queue
-	wsHub      *WebSocketHub
-	mux        *http.ServeMux
-	httpServer *http.Server
-	logger     *slog.Logger
+	config       config.ServerConfig
+	store        trace.Store
+	cfgLoader    *config.Loader
+	approvals    *approval.Queue
+	tokenManager *auth.TokenManager
+	wsHub        *WebSocketHub
+	mux          *http.ServeMux
+	httpServer   *http.Server
+	logger       *slog.Logger
 }
 
 // NewServer creates a new management API server.
@@ -30,56 +33,88 @@ func NewServer(
 	store trace.Store,
 	cfgLoader *config.Loader,
 	approvals *approval.Queue,
+	tokenManager *auth.TokenManager,
 	logger *slog.Logger,
 ) *Server {
 	s := &Server{
-		config:    cfg,
-		store:     store,
-		cfgLoader: cfgLoader,
-		approvals: approvals,
-		wsHub:     NewWebSocketHub(logger),
-		mux:       http.NewServeMux(),
-		logger:    logger,
+		config:       cfg,
+		store:        store,
+		cfgLoader:    cfgLoader,
+		approvals:    approvals,
+		tokenManager: tokenManager,
+		wsHub:        NewWebSocketHub(logger, cfg.CORS),
+		mux:          http.NewServeMux(),
+		logger:       logger,
 	}
 
 	s.registerRoutes()
 	return s
 }
 
+// authRequired wraps a handler with token-based authentication. If auth is
+// disabled in config, the handler is returned unwrapped with no overhead.
+func (s *Server) authRequired(action string, next http.HandlerFunc) http.HandlerFunc {
+	if !s.config.Auth.Enabled || s.tokenManager == nil {
+		return next
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		header := r.Header.Get("Authorization")
+		if header == "" || !strings.HasPrefix(header, "Bearer ") {
+			writeError(w, http.StatusUnauthorized, "missing or malformed Authorization header")
+			return
+		}
+		secret := strings.TrimPrefix(header, "Bearer ")
+
+		token, err := s.tokenManager.ValidateToken(secret, r.RemoteAddr)
+		if err != nil {
+			writeError(w, http.StatusUnauthorized, "invalid or expired token")
+			return
+		}
+
+		if !auth.HasPermission(token.Role, action) {
+			writeError(w, http.StatusForbidden, "insufficient permissions")
+			return
+		}
+
+		next(w, r)
+	}
+}
+
 func (s *Server) registerRoutes() {
 	// Sessions
-	s.mux.HandleFunc("GET /api/sessions", s.handleListSessions)
-	s.mux.HandleFunc("GET /api/sessions/{id}", s.handleGetSession)
-	s.mux.HandleFunc("DELETE /api/sessions/{id}", s.handleTerminateSession)
+	s.mux.HandleFunc("GET /api/sessions", s.authRequired("session.read", s.handleListSessions))
+	s.mux.HandleFunc("GET /api/sessions/{id}", s.authRequired("session.read", s.handleGetSession))
+	s.mux.HandleFunc("DELETE /api/sessions/{id}", s.authRequired("session.terminate", s.handleTerminateSession))
 
 	// Traces
-	s.mux.HandleFunc("GET /api/traces", s.handleListTraces)
-	s.mux.HandleFunc("GET /api/traces/{id}", s.handleGetTrace)
-	s.mux.HandleFunc("GET /api/traces/search", s.handleSearchTraces)
+	s.mux.HandleFunc("GET /api/traces", s.authRequired("trace", s.handleListTraces))
+	s.mux.HandleFunc("GET /api/traces/{id}", s.authRequired("trace", s.handleGetTrace))
+	s.mux.HandleFunc("GET /api/traces/search", s.authRequired("trace", s.handleSearchTraces))
 
 	// Agents
-	s.mux.HandleFunc("GET /api/agents", s.handleListAgents)
-	s.mux.HandleFunc("GET /api/agents/{id}", s.handleGetAgent)
-	s.mux.HandleFunc("GET /api/agents/{id}/stats", s.handleGetAgentStats)
-	s.mux.HandleFunc("GET /api/agents/{id}/versions", s.handleListAgentVersions)
-	s.mux.HandleFunc("POST /api/agents/{id}/pause", s.handlePauseAgent)
-	s.mux.HandleFunc("POST /api/agents/{id}/resume", s.handleResumeAgent)
+	s.mux.HandleFunc("GET /api/agents", s.authRequired("session.read", s.handleListAgents))
+	s.mux.HandleFunc("GET /api/agents/{id}", s.authRequired("session.read", s.handleGetAgent))
+	s.mux.HandleFunc("GET /api/agents/{id}/stats", s.authRequired("session.read", s.handleGetAgentStats))
+	s.mux.HandleFunc("GET /api/agents/{id}/versions", s.authRequired("session.read", s.handleListAgentVersions))
+	s.mux.HandleFunc("POST /api/agents/{id}/pause", s.authRequired("session.terminate", s.handlePauseAgent))
+	s.mux.HandleFunc("POST /api/agents/{id}/resume", s.authRequired("session.terminate", s.handleResumeAgent))
 
 	// Policies
-	s.mux.HandleFunc("GET /api/policies", s.handleListPolicies)
-	s.mux.HandleFunc("POST /api/policies/reload", s.handleReloadPolicies)
+	s.mux.HandleFunc("GET /api/policies", s.authRequired("session.read", s.handleListPolicies))
+	s.mux.HandleFunc("POST /api/policies/reload", s.authRequired("config.change", s.handleReloadPolicies))
 
 	// Approvals
-	s.mux.HandleFunc("GET /api/approvals", s.handleListApprovals)
-	s.mux.HandleFunc("POST /api/approvals/{id}/approve", s.handleApproveAction)
-	s.mux.HandleFunc("POST /api/approvals/{id}/deny", s.handleDenyAction)
+	s.mux.HandleFunc("GET /api/approvals", s.authRequired("session.read", s.handleListApprovals))
+	s.mux.HandleFunc("POST /api/approvals/{id}/approve", s.authRequired("session.terminate", s.handleApproveAction))
+	s.mux.HandleFunc("POST /api/approvals/{id}/deny", s.authRequired("session.terminate", s.handleDenyAction))
 
 	// Violations
-	s.mux.HandleFunc("GET /api/violations", s.handleListViolations)
+	s.mux.HandleFunc("GET /api/violations", s.authRequired("session.read", s.handleListViolations))
 
-	// System
+	// System — health is always public
 	s.mux.HandleFunc("GET /api/health", s.handleHealth)
-	s.mux.HandleFunc("GET /api/stats", s.handleStats)
+	s.mux.HandleFunc("GET /api/stats", s.authRequired("session.read", s.handleStats))
 
 	// WebSocket
 	s.mux.HandleFunc("GET /api/ws/traces", s.wsHub.HandleWebSocket)

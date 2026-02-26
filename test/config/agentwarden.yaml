@@ -48,14 +48,14 @@ policies:
 
   # Rate limiting (max 30 LLM calls per minute)
   - name: llm-rate-limit
-    condition: session.action_count("llm.chat", "60s") > 30
+    condition: action_count_in_window("llm.chat", "60s") > 30
     effect: throttle
     delay: 2s
     message: "Too many LLM calls, throttling for 2 seconds"
 
   # Tool call rate limiting (max 50 tool calls per minute)
   - name: tool-rate-limit
-    condition: session.action_count("tool.call", "60s") > 50
+    condition: action_count_in_window("tool.call", "60s") > 50
     effect: throttle
     delay: 1s
     message: "Too many tool calls, throttling for 1 second"

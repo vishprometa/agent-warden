@@ -58,8 +58,9 @@ type SessionInfo struct {
 
 // AgentInfo identifies the agent performing the action.
 type AgentInfo struct {
-	ID   string
-	Name string
+	ID        string
+	Name      string
+	DailyCost float64 // cumulative cost for the agent today (across all sessions)
 }
 
 // RequestInfo holds raw HTTP request details for policies that inspect
@@ -248,9 +249,9 @@ func (e *Engine) evaluateOne(p CompiledPolicy, ctx ActionContext) PolicyResult {
 
 	case CategoryAIJudge:
 		// AI judge evaluation is a future extension point. For now, log
-		// and allow so that AI-judge policies in config don't silently
-		// block traffic.
-		e.logger.Debug("ai-judge policy evaluation not yet implemented, allowing",
+		// a warning and allow so that AI-judge policies in config don't
+		// silently block traffic.
+		e.logger.Warn("ai-judge policy evaluation not yet implemented, allowing — this policy has no effect",
 			"policy", p.Config.Name,
 		)
 		return PolicyResult{Effect: EffectAllow}
@@ -277,19 +278,27 @@ func (e *Engine) evaluateOne(p CompiledPolicy, ctx ActionContext) PolicyResult {
 // evaluateCEL evaluates a CEL-based policy (budget, rate limit, or generic).
 func (e *Engine) evaluateCEL(p CompiledPolicy, ctx ActionContext) PolicyResult {
 	if p.CELRule == nil {
-		e.logger.Error("CEL policy has nil compiled rule, skipping",
+		e.logger.Error("CEL policy has nil compiled rule, failing closed",
 			"policy", p.Config.Name,
 		)
-		return PolicyResult{Effect: EffectAllow}
+		return PolicyResult{
+			Effect:     EffectDeny,
+			PolicyName: p.Config.Name,
+			Message:    "policy has nil compiled rule",
+		}
 	}
 
 	matched, err := e.celEval.Evaluate(*p.CELRule, ctx)
 	if err != nil {
-		e.logger.Error("CEL evaluation error, failing open (allow)",
+		e.logger.Error("CEL evaluation error, failing closed (deny)",
 			"policy", p.Config.Name,
 			"error", err,
 		)
-		return PolicyResult{Effect: EffectAllow}
+		return PolicyResult{
+			Effect:     EffectDeny,
+			PolicyName: p.Config.Name,
+			Message:    "policy evaluation error: " + err.Error(),
+		}
 	}
 
 	if !matched {

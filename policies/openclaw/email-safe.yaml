@@ -10,7 +10,7 @@ policies:
       action.type == "tool.call"
       && action.name.contains("delete")
       && action.name.contains("email")
-      && session.action_count("tool.call", "3600s") > 5
+      && action_count_in_window("tool.call", "3600s") > 5
     effect: approve
     timeout: 5m
     timeout_effect: deny
@@ -29,7 +29,7 @@ policies:
     condition: >
       action.type == "message.send"
       && action.params.channel.contains("email")
-      && session.action_count("message.send", "3600s") > 10
+      && action_count_in_window("message.send", "3600s") > 10
     effect: deny
     message: "Email send limit exceeded (10 per hour)"
 
@@ -39,7 +39,7 @@ policies:
   - name: stop-word-enforcement
     condition: >
       action.type == "tool.call"
-      && session.action_count("tool.call", "5s") > 3
+      && action_count_in_window("tool.call", "5s") > 3
     effect: approve
     timeout: 30s
     timeout_effect: deny

@@ -171,13 +171,11 @@ func (s *Server) handleListAgentVersions(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) handlePauseAgent(w http.ResponseWriter, r *http.Request) {
-	// TODO: implement session-level pause via session manager
-	writeJSON(w, map[string]string{"status": "paused"})
+	writeError(w, http.StatusNotImplemented, "session-level pause is not yet implemented")
 }
 
 func (s *Server) handleResumeAgent(w http.ResponseWriter, r *http.Request) {
-	// TODO: implement session-level resume via session manager
-	writeJSON(w, map[string]string{"status": "resumed"})
+	writeError(w, http.StatusNotImplemented, "session-level resume is not yet implemented")
 }
 
 // --- Policies ---

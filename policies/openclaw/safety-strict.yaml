@@ -71,7 +71,7 @@ policies:
 
   # ─── Rate Limiting (strict) ───
   - name: strict-rate-limit
-    condition: session.action_count("api.call", "60s") > 30
+    condition: action_count_in_window("api.call", "60s") > 30
     effect: deny
     message: "Rate limit exceeded (strict: 30/min)"
 

@@ -11,19 +11,33 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/agentwarden/agentwarden/internal/adapter"
+	"github.com/agentwarden/agentwarden/internal/approval"
 	"github.com/agentwarden/agentwarden/internal/policy"
 	"github.com/gorilla/websocket"
 )
 
-var wsUpgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
+// newWSUpgrader creates a WebSocket upgrader. When allowAllOrigins is false,
+// only same-origin requests are accepted.
+func newWSUpgrader(allowAllOrigins bool) websocket.Upgrader {
+	return websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			if allowAllOrigins {
+				return true
+			}
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				return true
+			}
+			return strings.Contains(origin, r.Host)
+		},
+	}
 }
 
 // GatewayAdapter proxies WebSocket traffic between OpenClaw agents and
@@ -31,31 +45,36 @@ var wsUpgrader = websocket.Upgrader{
 // an AgentWarden ActionContext, and evaluated against policies before
 // being forwarded upstream.
 type GatewayAdapter struct {
-	mu        sync.RWMutex
-	config    Config
-	evaluator func(policy.ActionContext) policy.PolicyResult
-	conns     map[string]*agentConn // sessionID → connection pair
-	logger    *slog.Logger
-	cancel    context.CancelFunc
+	mu            sync.RWMutex
+	config        Config
+	evaluator     func(policy.ActionContext) policy.PolicyResult
+	approvalQueue *approval.Queue
+	conns         map[string]*agentConn // sessionID → connection pair
+	wsUpgrader    websocket.Upgrader
+	logger        *slog.Logger
+	cancel        context.CancelFunc
 }
 
 // agentConn tracks a proxied WebSocket connection pair.
 type agentConn struct {
-	agentID   string
-	sessionID string
-	agent     *websocket.Conn // agent → AgentWarden
-	upstream  *websocket.Conn // AgentWarden → OpenClaw gateway
+	agentID     string
+	sessionID   string
+	agent       *websocket.Conn // agent → AgentWarden
+	upstream    *websocket.Conn // AgentWarden → OpenClaw gateway
+	cleanupOnce sync.Once
 }
 
 // NewGatewayAdapter creates a new OpenClaw gateway adapter.
-func NewGatewayAdapter(cfg Config, logger *slog.Logger) *GatewayAdapter {
+func NewGatewayAdapter(cfg Config, allowAllOrigins bool, approvalQ *approval.Queue, logger *slog.Logger) *GatewayAdapter {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &GatewayAdapter{
-		config: cfg,
-		conns:  make(map[string]*agentConn),
-		logger: logger.With("component", "adapter.openclaw"),
+		config:        cfg,
+		conns:         make(map[string]*agentConn),
+		approvalQueue: approvalQ,
+		wsUpgrader:    newWSUpgrader(allowAllOrigins),
+		logger:        logger.With("component", "adapter.openclaw"),
 	}
 }
 
@@ -165,7 +184,7 @@ func (a *GatewayAdapter) ConnectedAgents() int {
 // Mount this at the gateway proxy path (e.g., /gateway).
 func (a *GatewayAdapter) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Upgrade the agent's connection.
-	agentWS, err := wsUpgrader.Upgrade(w, r, nil)
+	agentWS, err := a.wsUpgrader.Upgrade(w, r, nil)
 	if err != nil {
 		a.logger.Error("failed to upgrade agent websocket", "error", err)
 		return
@@ -220,7 +239,7 @@ func (a *GatewayAdapter) HandleWebSocket(w http.ResponseWriter, r *http.Request)
 // proxyAgentToUpstream reads messages from the agent, evaluates them
 // against policies, and forwards allowed messages to the upstream gateway.
 func (a *GatewayAdapter) proxyAgentToUpstream(conn *agentConn) {
-	defer a.cleanupConn(conn.sessionID)
+	defer a.cleanupConn(conn)
 
 	for {
 		msgType, data, err := conn.agent.ReadMessage()
@@ -287,8 +306,32 @@ func (a *GatewayAdapter) proxyAgentToUpstream(conn *agentConn) {
 				// Fall through to forward after delay.
 
 			case "approve":
-				// TODO: Park request and wait for human approval.
-				// For now, forward immediately.
+				if a.approvalQueue != nil {
+					approvalReq := &approval.Request{
+						ID:         fmt.Sprintf("aq_%s_%d", conn.sessionID, time.Now().UnixNano()),
+						SessionID:  conn.sessionID,
+						PolicyName: result.PolicyName,
+						ActionSummary: map[string]interface{}{
+							"action_type": actionCtx.Action.Type,
+							"action_name": actionCtx.Action.Name,
+						},
+						Timeout:       5 * time.Minute,
+						TimeoutEffect: "deny",
+					}
+					ctx := context.Background()
+					approved, err := a.approvalQueue.Submit(ctx, approvalReq)
+					if err != nil || !approved {
+						denial := map[string]interface{}{
+							"type":    "governance_denied",
+							"effect":  "approve_rejected",
+							"policy":  result.PolicyName,
+							"message": "action was not approved",
+						}
+						denialData, _ := json.Marshal(denial)
+						_ = conn.agent.WriteMessage(websocket.TextMessage, denialData)
+						continue
+					}
+				}
 			}
 		}
 
@@ -301,7 +344,7 @@ func (a *GatewayAdapter) proxyAgentToUpstream(conn *agentConn) {
 
 // proxyUpstreamToAgent forwards messages from the upstream gateway back to the agent.
 func (a *GatewayAdapter) proxyUpstreamToAgent(conn *agentConn) {
-	defer a.cleanupConn(conn.sessionID)
+	defer a.cleanupConn(conn)
 
 	for {
 		msgType, data, err := conn.upstream.ReadMessage()
@@ -318,21 +361,20 @@ func (a *GatewayAdapter) proxyUpstreamToAgent(conn *agentConn) {
 	}
 }
 
-// cleanupConn removes a connection from the tracking map.
-func (a *GatewayAdapter) cleanupConn(sessionID string) {
-	a.mu.Lock()
-	if conn, ok := a.conns[sessionID]; ok {
+// cleanupConn removes a connection from the tracking map. It is safe to call
+// from multiple goroutines — the actual cleanup runs exactly once.
+func (a *GatewayAdapter) cleanupConn(conn *agentConn) {
+	conn.cleanupOnce.Do(func() {
+		a.mu.Lock()
+		delete(a.conns, conn.sessionID)
+		a.mu.Unlock()
+
 		_ = conn.agent.Close()
 		if conn.upstream != nil {
 			_ = conn.upstream.Close()
 		}
-		delete(a.conns, sessionID)
-	}
-	a.mu.Unlock()
+	})
 }
 
 // Ensure GatewayAdapter implements the adapter.Adapter interface.
 var _ adapter.Adapter = (*GatewayAdapter)(nil)
-
-// Suppress unused import for io package.
-var _ = io.EOF

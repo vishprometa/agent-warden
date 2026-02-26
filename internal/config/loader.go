@@ -138,7 +138,7 @@ policies:
 
   # Rate limiting
   - name: api-rate-limit
-    condition: 'session.action_count("api.call", "60s") > 100'
+    condition: 'action_count_in_window("api.call", "60s") > 100'
     effect: deny
     message: "Rate limit exceeded: >100 API calls per minute"
 
