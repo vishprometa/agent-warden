@@ -24,6 +24,7 @@ import (
 	"github.com/agentwarden/agentwarden/internal/cost"
 	"github.com/agentwarden/agentwarden/internal/dashboard"
 	"github.com/agentwarden/agentwarden/internal/detection"
+	"github.com/agentwarden/agentwarden/internal/evolution"
 	"github.com/agentwarden/agentwarden/internal/killswitch"
 	"github.com/agentwarden/agentwarden/internal/mdloader"
 	"github.com/agentwarden/agentwarden/internal/policy"
@@ -304,7 +305,14 @@ func main() {
 				return fmt.Errorf("failed to connect: %w", err)
 			}
 			defer func() { _ = resp.Body.Close() }()
-			fmt.Printf("✓ Agent %s paused\n", args[0])
+			if resp.StatusCode != http.StatusOK {
+				var errResp map[string]string
+				_ = decodeJSON(resp, &errResp)
+				return fmt.Errorf("pause failed: %s", errResp["error"])
+			}
+			var result map[string]interface{}
+			_ = decodeJSON(resp, &result)
+			fmt.Printf("✓ Agent %s paused (%v sessions paused)\n", args[0], result["sessions_paused"])
 			return nil
 		},
 	}
@@ -320,7 +328,14 @@ func main() {
 				return fmt.Errorf("failed to connect: %w", err)
 			}
 			defer func() { _ = resp.Body.Close() }()
-			fmt.Printf("✓ Agent %s resumed\n", args[0])
+			if resp.StatusCode != http.StatusOK {
+				var errResp map[string]string
+				_ = decodeJSON(resp, &errResp)
+				return fmt.Errorf("resume failed: %s", errResp["error"])
+			}
+			var result map[string]interface{}
+			_ = decodeJSON(resp, &result)
+			fmt.Printf("✓ Agent %s resumed (%v sessions resumed)\n", args[0], result["sessions_resumed"])
 			return nil
 		},
 	}
@@ -350,16 +365,7 @@ func main() {
 	// ─── evolve ───
 	evolveCmd := &cobra.Command{
 		Use:   "evolve",
-		Short: "Evolution engine commands (experimental)",
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println("WARNING: The evolution engine is experimental. API endpoints for")
-			fmt.Println("evolve status/trigger/promote/rollback are not yet registered on")
-			fmt.Println("the server. These commands will return 404 unless the evolution")
-			fmt.Println("API is explicitly enabled. Use 'evolve diff' and 'evolve history'")
-			fmt.Println("for local-only operations that work today.")
-			fmt.Println()
-			return nil
-		},
+		Short: "Evolution engine commands",
 	}
 
 	evolveStatusCmd := &cobra.Command{
@@ -618,6 +624,13 @@ func runStart(configFile string, portOverride int, devMode bool) error {
 	budgetChecker := policy.NewBudgetChecker(logger)
 	policyEngine := policy.NewEngine(policyLoader, celEval, budgetChecker, logger)
 	policyEngine.SetConfigLoader(cfgLoader)
+
+	// Wire AI judge for ai-judge type policies (uses OpenAI-compatible LLM API).
+	aiJudge := policy.NewAIJudge(func(path string) (string, error) {
+		return mdLoader.LoadPolicyMD(path)
+	}, cfg.Evolution.Model)
+	policyEngine.SetAIJudge(aiJudge)
+
 	if err := policyEngine.LoadPolicies(cfg.Policies); err != nil {
 		logger.Warn("some policies failed to load", "error", err)
 	}
@@ -771,7 +784,7 @@ func runStart(configFile string, portOverride int, devMode bool) error {
 	}
 
 	// Initialize management API server
-	apiServer := api.NewServer(cfg.Server, store, cfgLoader, approvalQueue, tokenManager, logger)
+	apiServer := api.NewServer(cfg.Server, store, cfgLoader, approvalQueue, sessionMgr, tokenManager, logger)
 
 	// Initialize gRPC event server
 	grpcEventServer := server.NewGRPCServer(
@@ -806,6 +819,67 @@ func runStart(configFile string, portOverride int, devMode bool) error {
 		}
 		masterMux.HandleFunc(proxyPath, openclawAdapter.HandleWebSocket)
 		logger.Info("OpenClaw gateway proxy registered", "path", proxyPath)
+	}
+
+	// Evolution engine API endpoints.
+	if cfg.Evolution.Enabled {
+		evoEngine := evolution.NewEngine(store, mdLoader, cfg.Evolution.Model, cfg.AgentsDir, logger)
+
+		masterMux.HandleFunc("GET /api/evolution/status", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"enabled": true,
+				"model":   cfg.Evolution.Model,
+			})
+		})
+
+		masterMux.HandleFunc("POST /api/evolution/{id}/trigger", func(w http.ResponseWriter, r *http.Request) {
+			agentID := r.PathValue("id")
+			result, err := evoEngine.TriggerEvolution(r.Context(), agentID)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(result)
+		})
+
+		masterMux.HandleFunc("POST /api/evolution/{id}/promote", func(w http.ResponseWriter, r *http.Request) {
+			agentID := r.PathValue("id")
+			promoted, err := evoEngine.PromoteCandidate(agentID)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"status":           "promoted",
+				"promoted_version": promoted,
+			})
+		})
+
+		masterMux.HandleFunc("POST /api/evolution/{id}/rollback", func(w http.ResponseWriter, r *http.Request) {
+			agentID := r.PathValue("id")
+			versions := evoEngine.GetVersionManager()
+			rolledBack, err := versions.Rollback(agentID)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"status":  "rolled_back",
+				"version": rolledBack,
+			})
+		})
+
+		logger.Info("evolution engine API endpoints registered")
 	}
 
 	// Kill switch API endpoints.

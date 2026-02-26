@@ -309,6 +309,12 @@ func (s *GRPCServer) buildPolicyContext(req *pb.ActionEvent) policy.ActionContex
 		actionCount = int(req.Context.SessionActionCount)
 	}
 
+	// Populate agent.daily_cost from the cost tracker.
+	agentDailyCost := float64(0)
+	if s.cost != nil {
+		agentDailyCost = s.cost.GetAgentCost(req.AgentId)
+	}
+
 	return policy.ActionContext{
 		Action: policy.ActionInfo{
 			Type:   req.Action.Type,
@@ -323,8 +329,9 @@ func (s *GRPCServer) buildPolicyContext(req *pb.ActionEvent) policy.ActionContex
 			ActionCount: actionCount,
 		},
 		Agent: policy.AgentInfo{
-			ID:   req.AgentId,
-			Name: req.AgentId,
+			ID:        req.AgentId,
+			Name:      req.AgentId,
+			DailyCost: agentDailyCost,
 		},
 	}
 }

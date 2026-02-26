@@ -257,7 +257,7 @@ A ULID-based trace ID is generated. The policy engine evaluates all loaded polic
 1. **Budget policies**: Check `session.cost` against thresholds
 2. **Rate limit policies**: Check `session.action_count` against limits
 3. **CEL policies**: Evaluate compiled CEL expressions
-4. **AI judge policies**: (Future) LLM-evaluated semantic checks
+4. **AI judge policies**: LLM-evaluated semantic checks via OpenAI-compatible API
 5. **Approval policies**: Park the request for human review
 
 If any policy returns `deny` or `terminate`, the request is blocked immediately. The proxy returns a JSON error with the trace ID, policy name, and reason. For `terminate`, the entire session is ended and an alert is dispatched.

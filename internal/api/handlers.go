@@ -171,11 +171,59 @@ func (s *Server) handleListAgentVersions(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) handlePauseAgent(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, "session-level pause is not yet implemented")
+	agentID := r.PathValue("id")
+	if s.sessions == nil {
+		writeError(w, http.StatusInternalServerError, "session manager not available")
+		return
+	}
+
+	sessions, _, err := s.store.ListSessions(trace.SessionFilter{AgentID: agentID, Status: "active", Limit: 1000})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list sessions: "+err.Error())
+		return
+	}
+
+	paused := 0
+	for _, sess := range sessions {
+		if err := s.sessions.SetPaused(sess.ID, true); err != nil {
+			continue
+		}
+		paused++
+	}
+
+	writeJSON(w, map[string]interface{}{
+		"status":          "paused",
+		"agent_id":        agentID,
+		"sessions_paused": paused,
+	})
 }
 
 func (s *Server) handleResumeAgent(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, "session-level resume is not yet implemented")
+	agentID := r.PathValue("id")
+	if s.sessions == nil {
+		writeError(w, http.StatusInternalServerError, "session manager not available")
+		return
+	}
+
+	sessions, _, err := s.store.ListSessions(trace.SessionFilter{AgentID: agentID, Status: "paused", Limit: 1000})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list sessions: "+err.Error())
+		return
+	}
+
+	resumed := 0
+	for _, sess := range sessions {
+		if err := s.sessions.SetPaused(sess.ID, false); err != nil {
+			continue
+		}
+		resumed++
+	}
+
+	writeJSON(w, map[string]interface{}{
+		"status":           "resumed",
+		"agent_id":         agentID,
+		"sessions_resumed": resumed,
+	})
 }
 
 // --- Policies ---

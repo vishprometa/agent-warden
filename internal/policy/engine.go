@@ -5,6 +5,7 @@
 package policy
 
 import (
+	"context"
 	"log/slog"
 	"sync"
 	"time"
@@ -93,6 +94,7 @@ type Engine struct {
 	loader   *Loader
 	celEval  *CELEvaluator
 	budget   *BudgetChecker
+	aiJudge  *AIJudge
 	logger   *slog.Logger
 
 	// configLoader is an optional reference to the top-level config loader,
@@ -117,6 +119,13 @@ func NewEngine(
 		budget:  budget,
 		logger:  logger.With("component", "policy.Engine"),
 	}
+}
+
+// SetAIJudge sets the AIJudge instance used to evaluate ai-judge policies.
+func (e *Engine) SetAIJudge(judge *AIJudge) {
+	e.mu.Lock()
+	e.aiJudge = judge
+	e.mu.Unlock()
 }
 
 // SetConfigLoader sets an optional config.Loader reference so that
@@ -180,8 +189,8 @@ func (e *Engine) ReloadPolicies() error {
 //     with a terminate/deny effect)
 //  2. Rate limit policies
 //  3. Generic CEL policies
-//  4. AI-judge policies (not yet implemented -- logged and skipped)
-//  5. Approval policies (not yet implemented -- logged and skipped)
+//  4. AI-judge policies (LLM-evaluated via OpenAI-compatible API)
+//  5. Approval policies (signals proxy to park request for human review)
 //
 // The pipeline short-circuits on the first deny or terminate. Throttle
 // results are collected and the longest delay is returned.
@@ -248,13 +257,7 @@ func (e *Engine) evaluateOne(p CompiledPolicy, ctx ActionContext) PolicyResult {
 		return e.evaluateCEL(p, ctx)
 
 	case CategoryAIJudge:
-		// AI judge evaluation is a future extension point. For now, log
-		// a warning and allow so that AI-judge policies in config don't
-		// silently block traffic.
-		e.logger.Warn("ai-judge policy evaluation not yet implemented, allowing — this policy has no effect",
-			"policy", p.Config.Name,
-		)
-		return PolicyResult{Effect: EffectAllow}
+		return e.evaluateAIJudge(p, ctx)
 
 	case CategoryApproval:
 		// Approval gates require async human interaction. The engine
@@ -317,6 +320,95 @@ func (e *Engine) evaluateCEL(p CompiledPolicy, ctx ActionContext) PolicyResult {
 	}
 
 	return result
+}
+
+// evaluateAIJudge sends the action context to an LLM for a nuanced allow/deny decision.
+func (e *Engine) evaluateAIJudge(p CompiledPolicy, ctx ActionContext) PolicyResult {
+	e.mu.RLock()
+	judge := e.aiJudge
+	e.mu.RUnlock()
+
+	if judge == nil {
+		e.logger.Warn("ai-judge policy has no AIJudge instance configured, allowing",
+			"policy", p.Config.Name,
+		)
+		return PolicyResult{Effect: EffectAllow}
+	}
+
+	// Load POLICY.md content if a context path is specified.
+	var policyMD string
+	if p.Config.Context != "" && judge.loadPolicyMD != nil {
+		md, err := judge.loadPolicyMD(p.Config.Context)
+		if err != nil {
+			e.logger.Warn("failed to load POLICY.md for ai-judge, using prompt field only",
+				"policy", p.Config.Name,
+				"context_path", p.Config.Context,
+				"error", err,
+			)
+		} else {
+			policyMD = md
+		}
+	}
+
+	// Fallback: use the prompt field if no POLICY.md was loaded.
+	if policyMD == "" && p.Config.Prompt != "" {
+		policyMD = p.Config.Prompt
+	}
+	if policyMD == "" {
+		policyMD = "Evaluate whether this action should be allowed based on security best practices."
+	}
+
+	input := AIJudgeInput{
+		PolicyName: p.Config.Name,
+		PolicyMD:   policyMD,
+		Model:      p.Config.Model,
+		Effect:     p.Config.Effect,
+		ActionType: ctx.Action.Type,
+		ActionName: ctx.Action.Name,
+		Params:     ctx.Action.Params,
+		Target:     ctx.Action.Target,
+		SessionID:  ctx.Session.ID,
+		AgentID:    ctx.Agent.ID,
+		Metadata:   ctx.Metadata,
+	}
+
+	// Use a timeout context to prevent AI judge from blocking forever.
+	judgeCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	result, err := judge.Evaluate(judgeCtx, input)
+	if err != nil {
+		e.logger.Error("ai-judge evaluation failed, failing closed (deny)",
+			"policy", p.Config.Name,
+			"error", err,
+		)
+		return PolicyResult{
+			Effect:     EffectDeny,
+			PolicyName: p.Config.Name,
+			Message:    "ai-judge evaluation error: " + err.Error(),
+		}
+	}
+
+	e.logger.Info("ai-judge evaluated",
+		"policy", p.Config.Name,
+		"deny", result.ShouldDeny,
+		"confidence", result.Confidence,
+		"reason", result.Reason,
+	)
+
+	if result.ShouldDeny {
+		effect := p.Config.Effect
+		if effect == "" {
+			effect = EffectDeny
+		}
+		return PolicyResult{
+			Effect:     effect,
+			PolicyName: p.Config.Name,
+			Message:    result.Reason,
+		}
+	}
+
+	return PolicyResult{Effect: EffectAllow}
 }
 
 // PolicyCount returns the number of currently loaded policies.

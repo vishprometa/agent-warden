@@ -1,6 +1,7 @@
 package alert
 
 import (
+	"fmt"
 	"log/slog"
 	"sync"
 	"testing"
@@ -593,7 +594,7 @@ func TestManager_ConcurrentSend(t *testing.T) {
 					Title:     "Test Alert",
 					Message:   "This is a test",
 					AgentID:   "agent-1",
-					SessionID: time.Now().Format(time.RFC3339Nano), // Unique session ID
+					SessionID: fmt.Sprintf("session-%d", idx), // Unique session ID per goroutine
 				}
 				m.Send(alert)
 			}(i)

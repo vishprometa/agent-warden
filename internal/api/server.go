@@ -11,6 +11,7 @@ import (
 	"github.com/agentwarden/agentwarden/internal/approval"
 	"github.com/agentwarden/agentwarden/internal/auth"
 	"github.com/agentwarden/agentwarden/internal/config"
+	"github.com/agentwarden/agentwarden/internal/session"
 	"github.com/agentwarden/agentwarden/internal/trace"
 )
 
@@ -20,6 +21,7 @@ type Server struct {
 	store        trace.Store
 	cfgLoader    *config.Loader
 	approvals    *approval.Queue
+	sessions     *session.Manager
 	tokenManager *auth.TokenManager
 	wsHub        *WebSocketHub
 	mux          *http.ServeMux
@@ -33,6 +35,7 @@ func NewServer(
 	store trace.Store,
 	cfgLoader *config.Loader,
 	approvals *approval.Queue,
+	sessions *session.Manager,
 	tokenManager *auth.TokenManager,
 	logger *slog.Logger,
 ) *Server {
@@ -41,6 +44,7 @@ func NewServer(
 		store:        store,
 		cfgLoader:    cfgLoader,
 		approvals:    approvals,
+		sessions:     sessions,
 		tokenManager: tokenManager,
 		wsHub:        NewWebSocketHub(logger, cfg.CORS),
 		mux:          http.NewServeMux(),

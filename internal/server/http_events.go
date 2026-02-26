@@ -177,6 +177,12 @@ func (s *HTTPEventsServer) handleEvaluate(w http.ResponseWriter, r *http.Request
 		actionCount = req.Context.SessionActionCount
 	}
 
+	// Populate agent.daily_cost from the cost tracker.
+	agentDailyCost := float64(0)
+	if s.cost != nil {
+		agentDailyCost = s.cost.GetAgentCost(req.AgentID)
+	}
+
 	policyCtx := policy.ActionContext{
 		Action: policy.ActionInfo{
 			Type:   req.Action.Type,
@@ -191,8 +197,9 @@ func (s *HTTPEventsServer) handleEvaluate(w http.ResponseWriter, r *http.Request
 			ActionCount: actionCount,
 		},
 		Agent: policy.AgentInfo{
-			ID:   req.AgentID,
-			Name: req.AgentID,
+			ID:        req.AgentID,
+			Name:      req.AgentID,
+			DailyCost: agentDailyCost,
 		},
 	}
 
@@ -268,6 +275,17 @@ func (s *HTTPEventsServer) handleTrace(w http.ResponseWriter, r *http.Request) {
 
 		// Increment session action count if session exists.
 		_ = s.sessions.IncrementActions(req.SessionID, trace.ActionType(req.Action.Type))
+
+		// Track cost from trace context so budget policies see trace-path costs.
+		if req.Context != nil && req.Context.SessionCost > 0 {
+			sess := s.sessions.Get(req.SessionID)
+			if sess != nil {
+				delta := req.Context.SessionCost - sess.TotalCost
+				if delta > 0 {
+					_ = s.sessions.AddCost(req.SessionID, delta)
+				}
+			}
+		}
 	}()
 
 	// Fire detection on the traced action.

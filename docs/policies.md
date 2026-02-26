@@ -187,7 +187,7 @@ Uses an LLM to evaluate whether an action should be allowed. This is useful for 
   message: "AI judge determined this query is unsafe"
 ```
 
-**Note:** AI judge policies are currently a future extension point. They are parsed and loaded but evaluated as `allow` in the current release.
+AI judge policies call the LLM configured via `AGENTWARDEN_LLM_BASE_URL` and `AGENTWARDEN_LLM_API_KEY` environment variables (any OpenAI-compatible API). The judge sends the action context along with the POLICY.md content and returns a structured allow/deny decision. If the LLM call fails, the policy fails closed (deny).
 
 ### Approval
 

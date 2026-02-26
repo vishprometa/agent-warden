@@ -1,8 +1,10 @@
 package detection
 
 import (
+	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/agentwarden/agentwarden/internal/config"
 )
@@ -28,18 +30,30 @@ type Engine struct {
 	anomaly  *CostAnomalyDetector
 	spiral   *SpiralDetector
 	velocity *VelocityDetector
+	drift    *DriftDetector
 	handler  EventHandler
 	logger   *slog.Logger
 }
 
 // NewEngine creates a new detection engine.
 func NewEngine(cfg config.DetectionConfig, handler EventHandler, logger *slog.Logger) *Engine {
+	// Initialize drift detector with config or defaults.
+	driftThreshold := cfg.Drift.Threshold
+	if driftThreshold <= 0 {
+		driftThreshold = 0.3
+	}
+	driftWindow := cfg.Drift.Window
+	if driftWindow <= 0 {
+		driftWindow = 5 * time.Minute
+	}
+
 	return &Engine{
 		config:   cfg,
 		loop:     NewLoopDetector(cfg.Loop),
 		anomaly:  NewCostAnomalyDetector(cfg.CostAnomaly),
 		spiral:   NewSpiralDetector(cfg.Spiral),
 		velocity: NewVelocityDetector(cfg.Velocity),
+		drift:    NewDriftDetector(driftWindow, driftThreshold),
 		handler:  handler,
 		logger:   logger,
 	}
@@ -114,6 +128,34 @@ func (e *Engine) Analyze(event ActionEvent) {
 			}
 		}
 	}
+
+	// Drift detection (behavioral shift from baseline)
+	if cfg.Drift.Enabled && e.drift != nil {
+		e.drift.RecordAction(event.AgentID, event.ActionType)
+		if result := e.drift.Check(event.AgentID); result != nil && result.Drifted {
+			e.logger.Warn("behavioral drift detected",
+				"agent_id", event.AgentID,
+				"divergence", result.Divergence,
+			)
+			driftDetails := map[string]interface{}{
+				"divergence": result.Divergence,
+			}
+			if len(result.TopDrifts) > 0 {
+				driftDetails["top_drift"] = fmt.Sprintf("%s: expected=%.2f actual=%.2f",
+					result.TopDrifts[0].ActionType, result.TopDrifts[0].Expected, result.TopDrifts[0].Actual)
+			}
+			if e.handler != nil {
+				e.handler(Event{
+					Type:      "drift",
+					SessionID: event.SessionID,
+					AgentID:   event.AgentID,
+					Action:    cfg.Drift.Action,
+					Message:   fmt.Sprintf("behavioral drift detected (KL-divergence: %.3f)", result.Divergence),
+					Details:   driftDetails,
+				})
+			}
+		}
+	}
 }
 
 // ResetSession clears all detector state for a session.
@@ -125,6 +167,14 @@ func (e *Engine) ResetSession(sessionID string) {
 }
 
 // UpdateConfig updates the detection configuration.
+// PromoteDriftBaseline promotes the current observation window to baseline
+// for the given agent. Call this periodically once enough data has accumulated.
+func (e *Engine) PromoteDriftBaseline(agentID string) {
+	if e.drift != nil {
+		e.drift.PromoteBaseline(agentID)
+	}
+}
+
 func (e *Engine) UpdateConfig(cfg config.DetectionConfig) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -133,4 +183,14 @@ func (e *Engine) UpdateConfig(cfg config.DetectionConfig) {
 	e.anomaly = NewCostAnomalyDetector(cfg.CostAnomaly)
 	e.spiral = NewSpiralDetector(cfg.Spiral)
 	e.velocity = NewVelocityDetector(cfg.Velocity)
+
+	driftThreshold := cfg.Drift.Threshold
+	if driftThreshold <= 0 {
+		driftThreshold = 0.3
+	}
+	driftWindow := cfg.Drift.Window
+	if driftWindow <= 0 {
+		driftWindow = 5 * time.Minute
+	}
+	e.drift = NewDriftDetector(driftWindow, driftThreshold)
 }

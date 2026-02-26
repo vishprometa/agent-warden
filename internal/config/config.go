@@ -75,6 +75,14 @@ type DetectionConfig struct {
 	CostAnomaly CostAnomalyConfig       `yaml:"cost_anomaly"`
 	Spiral      SpiralDetectionConfig   `yaml:"spiral"`
 	Velocity    VelocityDetectionConfig `yaml:"velocity"`
+	Drift       DriftDetectionConfig    `yaml:"drift"`
+}
+
+type DriftDetectionConfig struct {
+	Enabled   bool          `yaml:"enabled"`
+	Threshold float64       `yaml:"threshold"` // KL-divergence threshold (0.1=sensitive, 0.5=lenient)
+	Window    time.Duration `yaml:"window"`
+	Action    string        `yaml:"action"` // alert, pause, terminate
 }
 
 type VelocityDetectionConfig struct {
