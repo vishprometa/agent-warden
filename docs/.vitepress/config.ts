@@ -3,43 +3,59 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: 'AgentWarden',
   description: 'Runtime governance for AI agents. Observe. Enforce. Evolve.',
+  appearance: 'dark',
 
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/logo.svg' }],
-    ['meta', { name: 'theme-color', content: '#6366f1' }],
+    ['meta', { name: 'theme-color', content: '#f59e0b' }],
     ['meta', { property: 'og:type', content: 'website' }],
-    ['meta', { property: 'og:title', content: 'AgentWarden' }],
-    ['meta', { property: 'og:description', content: 'Runtime governance for AI agents' }],
+    ['meta', { property: 'og:title', content: 'AgentWarden — Runtime Governance for AI Agents' }],
+    ['meta', { property: 'og:description', content: 'The lightweight proxy that keeps your AI agents safe, auditable, and under control.' }],
+    ['meta', { property: 'og:image', content: '/logo.svg' }],
+    ['link', { rel: 'preconnect', href: 'https://fonts.googleapis.com' }],
+    ['link', { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' }],
+    ['link', { href: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap', rel: 'stylesheet' }],
   ],
 
   themeConfig: {
     logo: '/logo.svg',
+    siteTitle: 'AgentWarden',
 
     nav: [
-      { text: 'Guide', link: '/quickstart' },
-      { text: 'API Reference', link: '/api-reference' },
-      { text: 'GitHub', link: 'https://github.com/vishprometa/agent-warden' },
+      { text: 'Guide', link: '/quickstart', activeMatch: '/quickstart|/configuration' },
+      { text: 'OpenClaw', link: '/openclaw' },
+      { text: 'Policies', link: '/policies' },
+      { text: 'API', link: '/api-reference' },
     ],
 
     sidebar: [
       {
         text: 'Getting Started',
+        collapsed: false,
         items: [
           { text: 'Quick Start', link: '/quickstart' },
           { text: 'Configuration', link: '/configuration' },
         ]
       },
       {
-        text: 'Core Concepts',
+        text: 'Governance',
+        collapsed: false,
         items: [
-          { text: 'Architecture', link: '/architecture' },
-          { text: 'Policies', link: '/policies' },
           { text: 'OpenClaw Integration', link: '/openclaw' },
+          { text: 'Policies', link: '/policies' },
+          { text: 'Architecture', link: '/architecture' },
+        ]
+      },
+      {
+        text: 'Advanced',
+        collapsed: false,
+        items: [
           { text: 'Self-Evolution', link: '/evolution' },
         ]
       },
       {
         text: 'Reference',
+        collapsed: false,
         items: [
           { text: 'API Reference', link: '/api-reference' },
           { text: 'Python SDK', link: '/sdk-python' },
@@ -54,7 +70,7 @@ export default defineConfig({
 
     footer: {
       message: 'Released under the MIT License.',
-      copyright: 'Copyright © 2025-present AgentWarden',
+      copyright: 'Copyright \u00A9 2025-present AgentWarden',
     },
 
     search: {
@@ -64,6 +80,15 @@ export default defineConfig({
     editLink: {
       pattern: 'https://github.com/vishprometa/agent-warden/edit/main/docs/:path',
       text: 'Edit this page on GitHub',
+    },
+
+    outline: {
+      level: [2, 3],
+      label: 'On this page',
+    },
+
+    lastUpdated: {
+      text: 'Last updated',
     },
   },
 })
