@@ -3,7 +3,7 @@ layout: home
 
 hero:
   name: AgentWarden
-  text: Stop your agents before they stop you
+  text: Every agent needs a warden
   tagline: Kill switches, policy enforcement, cost tracking, and audit trails. One binary, zero code changes.
   actions:
     - theme: brand
