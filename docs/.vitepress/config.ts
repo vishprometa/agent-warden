@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitepress'
+import { withMermaid } from 'vitepress-plugin-mermaid'
 
-export default defineConfig({
+export default withMermaid(defineConfig({
   title: 'AgentWarden',
   description: 'Runtime governance for AI agents. Observe. Enforce. Evolve.',
   appearance: 'dark',
@@ -90,4 +91,8 @@ export default defineConfig({
       text: 'Last updated',
     },
   },
-})
+
+  mermaid: {
+    theme: 'dark',
+  },
+}))

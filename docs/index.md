@@ -3,7 +3,6 @@ layout: home
 
 hero:
   name: Governance Infra for Enterprise Agents
-  text: AgentWarden
   tagline: Runtime governance for your agent infra. Kill switches, policy enforcement, cost tracking, and audit trails. One binary, zero code changes.
   actions:
     - theme: brand
@@ -65,21 +64,6 @@ AgentWarden sits between your AI <span class="highlight">agents</span> and the o
     <p>Every request flows through the <span class="highlight">governance</span> engine, anomaly detectors, and trace store. Kill runaway <span class="highlight">agents</span>, enforce budgets, and audit everything.</p>
   </div>
 </div>
-</div>
-
-<div class="architecture-preview">
-
-```
-Agent ──► AgentWarden ──► LLM API / Tools / APIs
-               │
-               ├── Kill Switch    (hard stop)
-               ├── Capabilities   (scope checks)
-               ├── Policy Engine  (CEL rules)
-               ├── Detection      (loops, velocity, spirals, drift)
-               ├── Audit Trail    (hash-chained traces)
-               └── Dashboard      (real-time visibility)
-```
-
 </div>
 
 <div class="cta-section">

@@ -32,63 +32,102 @@ All state is persisted to a local SQLite database. The dashboard is compiled int
 
 ## Architecture Diagram
 
-```
-                          AI Agent (Python / TypeScript / HTTP)
-                                        |
-                        X-AgentWarden-Agent-Id: my-agent
-                        X-AgentWarden-Session-Id: ses_abc
-                        Authorization: Bearer sk-...
-                                        |
-                                        v
-                   +--------------------------------------------+
-                   |         AgentWarden  (:6777)               |
-                   |                                            |
-                   |  /dashboard    /api/*        /*            |
-                   |     |            |            |            |
-                   |  [React SPA]  [API Server]  [Proxy]       |
-                   |                  |            |            |
-                   |                  |    +-------+-------+   |
-                   |                  |    |               |   |
-                   |                  | [Classifier]  [Router]  |
-                   |                  |    |               |   |
-                   |                  |    v               |   |
-                   |              [Policy Engine]          |   |
-                   |               /    |    \             |   |
-                   |           Budget  CEL  Approval       |   |
-                   |                  |                    |   |
-                   |        +---------+--------+          |   |
-                   |        |         |        |          |   |
-                   |   [Cost      [Session  [Detection    |   |
-                   |    Tracker]   Manager]  Engine]       |   |
-                   |        |         |    / | | | \      |   |
-                   |        |         |  Loop Cost Spiral  |   |
-                   |        |         |       Drift Velocity |   |
-                   |        |         |        |          |   |
-                   |        +----+----+--------+          |   |
-                   |             |                        |   |
-                   |        [Trace Store]                  |   |
-                   |             |                        |   |
-                   |        [SQLite DB]                    |   |
-                   |             |                        |   |
-                   |      [Alert Manager]   [WebSocket Hub]|   |
-                   |        /        \          |         |   |
-                   |    Slack      Webhook   Clients      |   |
-                   +--------------------------------------------+
-                                        |
-                                        v
-                   +--------------------------------------------+
-                   |         Upstream LLM Providers              |
-                   |                                            |
-                   |   OpenAI    Anthropic    Google Gemini      |
-                   |   api.openai.com  api.anthropic.com  ...   |
-                   +--------------------------------------------+
+```mermaid
+graph TB
+    Agent["🤖 AI Agent<br/><i>Python / TypeScript / HTTP</i>"]
 
-                   +--------------------------------------------+
-                   |         Evolution Engine (built-in)         |
-                   |                                            |
-                   |   Analyzer -> Proposer -> Shadow Runner     |
-                   |     (LLM)      (diffs)    (parallel test)  |
-                   +--------------------------------------------+
+    Agent -->|"X-AgentWarden-Agent-Id<br/>X-AgentWarden-Session-Id<br/>Authorization: Bearer sk-..."| AW
+
+    subgraph AW["AgentWarden :6777"]
+        direction TB
+
+        subgraph Routes[" "]
+            direction LR
+            Dashboard["/dashboard<br/>React SPA"]
+            API["/api/*<br/>API Server"]
+            Proxy["/*<br/>Proxy"]
+        end
+
+        subgraph Pipeline["Interception Pipeline"]
+            direction TB
+            Classifier["Classifier"]
+            Router["Router"]
+            Classifier --> PolicyEngine
+            Router --> Upstream
+
+            subgraph PolicyEngine["Policy Engine"]
+                direction LR
+                Budget["Budget"]
+                CEL["CEL"]
+                Approval["Approval"]
+            end
+        end
+
+        subgraph Core["Core Services"]
+            direction LR
+            CostTracker["Cost Tracker"]
+            SessionMgr["Session Manager"]
+            Detection["Detection Engine"]
+        end
+
+        subgraph Detectors["Anomaly Detectors"]
+            direction LR
+            Loop["Loop"]
+            CostAnomaly["Cost Anomaly"]
+            Spiral["Spiral"]
+            Drift["Drift"]
+            Velocity["Velocity"]
+        end
+
+        subgraph Storage["Persistence"]
+            TraceStore["Trace Store"]
+            SQLite[("SQLite DB")]
+            TraceStore --> SQLite
+        end
+
+        subgraph Alerts["Notifications"]
+            direction LR
+            AlertMgr["Alert Manager"]
+            WSHub["WebSocket Hub"]
+        end
+
+        Proxy --> Classifier
+        Proxy --> Router
+        PolicyEngine --> Core
+        Detection --> Detectors
+        Core --> TraceStore
+        AlertMgr -->|Slack| SlackOut["Slack"]
+        AlertMgr -->|HTTP| WebhookOut["Webhook"]
+        WSHub --> Clients["Dashboard Clients"]
+    end
+
+    subgraph Upstream["Upstream LLM Providers"]
+        direction LR
+        OpenAI["OpenAI<br/><i>api.openai.com</i>"]
+        Anthropic["Anthropic<br/><i>api.anthropic.com</i>"]
+        Gemini["Google Gemini<br/><i>generativelanguage.googleapis.com</i>"]
+    end
+
+    subgraph Evolution["Evolution Engine (built-in)"]
+        direction LR
+        Analyzer["Analyzer<br/><i>LLM</i>"] --> Proposer["Proposer<br/><i>diffs</i>"]
+        Proposer --> Shadow["Shadow Runner<br/><i>parallel test</i>"]
+    end
+
+    AW --> Upstream
+    SQLite -.-> Evolution
+
+    style AW fill:#1a1a2e,stroke:#f97316,stroke-width:2px,color:#fff
+    style Pipeline fill:#16213e,stroke:#4a90d9,stroke-width:1px,color:#fff
+    style Core fill:#16213e,stroke:#4a90d9,stroke-width:1px,color:#fff
+    style Detectors fill:#1a1a2e,stroke:#6366f1,stroke-width:1px,color:#fff
+    style Storage fill:#16213e,stroke:#22c55e,stroke-width:1px,color:#fff
+    style Alerts fill:#16213e,stroke:#eab308,stroke-width:1px,color:#fff
+    style Upstream fill:#0f3460,stroke:#4a90d9,stroke-width:2px,color:#fff
+    style Evolution fill:#1a1a2e,stroke:#a855f7,stroke-width:2px,color:#fff
+    style Agent fill:#09090b,stroke:#f97316,stroke-width:2px,color:#fff
+    style PolicyEngine fill:#1e293b,stroke:#f97316,stroke-width:1px,color:#fff
+    style Routes fill:transparent,stroke:none,color:#fff
 ```
 
 ---
