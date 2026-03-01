@@ -2,8 +2,8 @@
 layout: home
 
 hero:
-  name: Open Source
-  text: Runtime governance for AI agents
+  name: AgentWarden
+  text: Stop your agents before they stop you
   tagline: Kill switches, policy enforcement, cost tracking, and audit trails. One binary, zero code changes.
   actions:
     - theme: brand
