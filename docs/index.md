@@ -2,8 +2,8 @@
 layout: home
 
 hero:
-  name: AgentWarden
-  text: Deploy governance for your AI agents
+  name: Open Source
+  text: Runtime governance for AI agents
   tagline: Kill switches, policy enforcement, cost tracking, and audit trails. One binary, zero code changes.
   actions:
     - theme: brand
@@ -41,27 +41,6 @@ features:
 ---
 
 <div class="home-content">
-
-<div class="terminal-preview">
-  <div class="terminal-header">
-    <div class="terminal-dots">
-      <span class="dot dot-red"></span>
-      <span class="dot dot-yellow"></span>
-      <span class="dot dot-green"></span>
-    </div>
-    <span class="terminal-title">terminal</span>
-  </div>
-  <div class="terminal-body">
-    <div class="line"><span class="accent">$</span> brew install agentwarden</div>
-    <div class="line dim">Installing agentwarden...</div>
-    <div class="line success">✓ Installed agentwarden v0.9.0</div>
-    <div class="line mt"><span class="accent">$</span> agentwarden start</div>
-    <div class="line dim">Proxy listening on <span class="accent">:6777</span></div>
-    <div class="line dim">Dashboard at <span class="accent">http://localhost:6777/dashboard</span></div>
-    <div class="line dim">5 detectors active, fail-closed mode</div>
-    <div class="line success mt">✓ Ready — point your agent at localhost:6777</div>
-  </div>
-</div>
 
 <div class="how-it-works">
 
