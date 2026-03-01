@@ -7,14 +7,14 @@ export default defineConfig({
 
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/logo.svg' }],
-    ['meta', { name: 'theme-color', content: '#f59e0b' }],
+    ['meta', { name: 'theme-color', content: '#09090b' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:title', content: 'AgentWarden — Runtime Governance for AI Agents' }],
-    ['meta', { property: 'og:description', content: 'The lightweight proxy that keeps your AI agents safe, auditable, and under control.' }],
+    ['meta', { property: 'og:description', content: 'Deploy governance for your AI agents. Kill switches, policy enforcement, cost tracking, and audit trails.' }],
     ['meta', { property: 'og:image', content: '/logo.svg' }],
     ['link', { rel: 'preconnect', href: 'https://fonts.googleapis.com' }],
     ['link', { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' }],
-    ['link', { href: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap', rel: 'stylesheet' }],
+    ['link', { href: 'https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Inter:wght@300;400;500;600;700&display=swap', rel: 'stylesheet' }],
   ],
 
   themeConfig: {
@@ -22,8 +22,7 @@ export default defineConfig({
     siteTitle: 'AgentWarden',
 
     nav: [
-      { text: 'Guide', link: '/quickstart', activeMatch: '/quickstart|/configuration' },
-      { text: 'OpenClaw', link: '/openclaw' },
+      { text: 'Docs', link: '/quickstart' },
       { text: 'Policies', link: '/policies' },
       { text: 'API', link: '/api-reference' },
     ],
