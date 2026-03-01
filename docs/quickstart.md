@@ -75,7 +75,8 @@ That is it. AgentWarden is now:
 - Serving the **monitoring dashboard** at `http://localhost:6777/dashboard`
 - Serving the **management API** at `http://localhost:6777/api`
 - Storing traces in a local **SQLite database** (`./agentwarden.db`)
-- Running **loop detection**, **cost anomaly detection**, and **spiral detection** with default thresholds
+- Running **five anomaly detectors** (loop, cost anomaly, spiral, drift, velocity) with default thresholds
+- Using **fail-closed** mode (deny on error) by default
 
 ### Point Your Agent at the Proxy
 
@@ -103,6 +104,31 @@ This creates `agentwarden.yaml` in the current directory with commented defaults
 
 ```bash
 agentwarden start --config agentwarden.yaml
+```
+
+### Scaffold Agent Files
+
+Set up the evolution engine for an agent:
+
+```bash
+# Create AGENT.md, PROMPT.md, EVOLVE.md for your agent
+agentwarden init agent --id my-agent
+
+# Scaffold a policy with a POLICY.md context file
+agentwarden init policy --name sql-safety
+
+# Scaffold a detection playbook
+agentwarden init playbook --template loop-breaker
+```
+
+### Useful Commands
+
+```bash
+agentwarden status            # Running status, active sessions, violations
+agentwarden policy validate   # Check config and CEL expressions
+agentwarden agent list        # All registered agents with stats
+agentwarden evolve status     # Evolution engine status
+agentwarden doctor            # Diagnostic checks
 ```
 
 ---

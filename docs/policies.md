@@ -40,6 +40,7 @@ policies:
 | `delay` | duration | No | Delay for `throttle` effect (e.g., `5s`, `1m`) |
 | `prompt` | string | No | LLM prompt for `ai-judge` policies |
 | `model` | string | No | LLM model for `ai-judge` policies |
+| `context` | string | No | Path to a POLICY.md file containing detailed instructions for `ai-judge` policies |
 | `approvers` | list | No | List of approver identifiers for `approve` effect |
 | `timeout` | duration | No | Timeout for `approve` effect before `timeout_effect` applies |
 | `timeout_effect` | string | No | Effect when approval times out: `deny` or `allow` |
@@ -118,12 +119,19 @@ Accumulated state for the current agent session.
 
 ### agent.*
 
-Identity of the agent making the request.
+Identity and accumulated metrics for the agent making the request.
 
 | Variable | Type | Description |
 |----------|------|-------------|
 | `agent.id` | string | Agent identifier (from `X-AgentWarden-Agent-Id` header) |
 | `agent.name` | string | Agent display name (defaults to agent ID) |
+| `agent.daily_cost` | double | Cumulative cost in USD across all sessions for this agent today (resets at midnight UTC) |
+
+### Custom Functions
+
+| Function | Return Type | Description |
+|----------|-------------|-------------|
+| `action_count_in_window(actionType, window)` | int | Count of actions of a given type within a sliding time window. `actionType` is a string (e.g., `"tool.call"`), `window` is a duration string (e.g., `"60s"`, `"5m"`). |
 
 ---
 
@@ -187,7 +195,24 @@ Uses an LLM to evaluate whether an action should be allowed. This is useful for 
   message: "AI judge determined this query is unsafe"
 ```
 
-AI judge policies call the LLM configured via `AGENTWARDEN_LLM_BASE_URL` and `AGENTWARDEN_LLM_API_KEY` environment variables (any OpenAI-compatible API). The judge sends the action context along with the POLICY.md content and returns a structured allow/deny decision. If the LLM call fails, the policy fails closed (deny).
+AI judge policies call the LLM configured via `AGENTWARDEN_LLM_BASE_URL` and `AGENTWARDEN_LLM_API_KEY` environment variables (any OpenAI-compatible API). The judge sends the action context along with the policy instructions and returns a structured allow/deny decision. If the LLM call fails, the policy fails closed (deny).
+
+#### Context Files (POLICY.md)
+
+For complex policies, you can provide detailed instructions in a separate markdown file using the `context` field:
+
+```yaml
+- name: data-access-judge
+  type: ai-judge
+  context: ./policies/data-access.policy.md
+  model: gpt-4o-mini
+  effect: deny
+  message: "AI judge blocked this data access"
+```
+
+The `context` field takes a file path to a POLICY.md file. When specified, the engine loads the file contents and uses them as the system prompt for the AI judge. This is preferred over inline `prompt` for policies that need detailed instructions.
+
+If both `context` and `prompt` are specified, `context` takes precedence. If neither is specified, a default prompt based on security best practices is used.
 
 ### Approval
 
@@ -380,7 +405,20 @@ Different budgets for different agents:
   message: "Default agent budget exceeded"
 ```
 
-### 3. Block Expensive Models
+### 3. Daily Agent Budget
+
+Cap total spending across all sessions for an agent per day using `agent.daily_cost`:
+
+```yaml
+- name: daily-budget
+  condition: "agent.daily_cost > 100.0"
+  effect: deny
+  message: "Agent has exceeded $100 daily budget"
+```
+
+`agent.daily_cost` accumulates cost across all sessions for the agent and resets at midnight UTC.
+
+### 4. Block Expensive Models
 
 Prevent agents from using costly models:
 
@@ -391,7 +429,7 @@ Prevent agents from using costly models:
   message: "Claude Opus models are restricted. Use Sonnet or Haiku."
 ```
 
-### 4. Action Count Rate Limit
+### 5. Action Count Rate Limit
 
 Cap the total number of actions in a session:
 
@@ -402,7 +440,7 @@ Cap the total number of actions in a session:
   message: "Session exceeded 500 actions"
 ```
 
-### 5. Block All Tool Calls
+### 6. Block All Tool Calls
 
 Lock down to LLM-only mode:
 
@@ -413,7 +451,7 @@ Lock down to LLM-only mode:
   message: "Only LLM chat is allowed in this environment"
 ```
 
-### 6. Block Specific MCP Tools
+### 7. Block Specific MCP Tools
 
 ```yaml
 - name: no-dangerous-mcp
@@ -424,7 +462,7 @@ Lock down to LLM-only mode:
   message: "This MCP tool is not allowed"
 ```
 
-### 7. Production Database Protection
+### 8. Production Database Protection
 
 ```yaml
 - name: no-prod-writes
@@ -435,7 +473,7 @@ Lock down to LLM-only mode:
   message: "Production database access is blocked"
 ```
 
-### 8. Throttle After Threshold
+### 9. Throttle After Threshold
 
 Slow down rather than block:
 
@@ -447,7 +485,7 @@ Slow down rather than block:
   message: "Slowing down: over 50 actions"
 ```
 
-### 9. Require Approval for File Writes
+### 10. Require Approval for File Writes
 
 ```yaml
 - name: file-write-approval
@@ -459,7 +497,7 @@ Slow down rather than block:
   timeout_effect: deny
 ```
 
-### 10. Agent-Specific Allow List
+### 11. Agent-Specific Allow List
 
 Allow a trusted agent to bypass a general block:
 
@@ -478,3 +516,14 @@ Allow a trusted agent to bypass a general block:
 ```
 
 Place the `allow` policy before the `deny` policy. Since evaluation short-circuits, the trusted agent matches the first rule and the deny rule is never reached.
+
+### 12. Sliding Window Rate Limit
+
+Use `action_count_in_window()` for time-based rate limiting:
+
+```yaml
+- name: email-rate-limit
+  condition: 'action_count_in_window("message.send", "60s") > 5'
+  effect: deny
+  message: "Rate limit: max 5 messages per minute"
+```

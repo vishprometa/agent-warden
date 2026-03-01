@@ -60,8 +60,9 @@ All state is persisted to a local SQLite database. The dashboard is compiled int
                    |        |         |        |          |   |
                    |   [Cost      [Session  [Detection    |   |
                    |    Tracker]   Manager]  Engine]       |   |
-                   |        |         |      / | \        |   |
+                   |        |         |    / | | | \      |   |
                    |        |         |  Loop Cost Spiral  |   |
+                   |        |         |       Drift Velocity |   |
                    |        |         |        |          |   |
                    |        +----+----+--------+          |   |
                    |             |                        |   |
@@ -82,14 +83,11 @@ All state is persisted to a local SQLite database. The dashboard is compiled int
                    |   api.openai.com  api.anthropic.com  ...   |
                    +--------------------------------------------+
 
-              (Optional, separate process)
-
                    +--------------------------------------------+
-                   |         Evolution Sidecar (Python)          |
+                   |         Evolution Engine (built-in)         |
                    |                                            |
-                   |   Scorer -> Analyzer -> Shadow Runner       |
-                   |              |                             |
-                   |         Uses /api/* management API          |
+                   |   Analyzer -> Proposer -> Shadow Runner     |
+                   |     (LLM)      (diffs)    (parallel test)  |
                    +--------------------------------------------+
 ```
 
@@ -124,13 +122,15 @@ Evaluates governance policies against every intercepted action. The engine holds
 
 ### Detection Engine (`internal/detection`)
 
-Runs three independent anomaly detectors on every intercepted action. Each detector maintains per-session state and can trigger pause, alert, or terminate actions.
+Runs five independent anomaly detectors on every intercepted action. Each detector maintains per-session state and can trigger pause, alert, or terminate actions. Each detector supports a `fallback_action` (what to do when detection fires) and an optional `playbook_model` for LLM-evaluated playbooks.
 
 | Detector | File | Algorithm |
 |----------|------|-----------|
 | **Loop** | `loop.go` | Sliding-window counter that tracks (sessionID, signature) pairs. A signature is the concatenation of action type, name, and model. When the same signature repeats more than `threshold` times within `window`, a loop is detected. |
 | **Cost Anomaly** | `anomaly.go` | Compares the average cost-per-action in the last 30 seconds against a baseline established from earlier actions in the session. Requires at least 3 data points before establishing a baseline. Fires when the recent rate exceeds the baseline by the configured `multiplier`. |
 | **Spiral** | `spiral.go` | Detects non-converging conversation loops by computing word-frequency-based cosine similarity between consecutive LLM outputs. When `window` consecutive outputs exceed `similarity_threshold`, a spiral is detected. |
+| **Drift** | `drift.go` | Tracks action type frequency distributions per agent and detects behavioral drift using KL-divergence (Kullback-Leibler divergence). Maintains a baseline distribution of known-good behavior and compares it to the current window. Uses Laplace smoothing to avoid log(0). Fires when divergence exceeds `threshold`. |
+| **Velocity** | `velocity.go` | Detects rapid-fire actions suggesting a runaway agent. Tracks action timestamps per session and computes actions-per-second. Fires when velocity exceeds `threshold` for `sustained_seconds` consecutively. Unlike loop detection (which catches repeated identical actions), velocity catches diverse rapid actions. |
 
 ### Session Manager (`internal/session`)
 
@@ -193,14 +193,16 @@ Embedded React SPA compiled into the Go binary via `go:embed`.
 - Served at `/dashboard` by the Go HTTP server
 - Connects to the WebSocket feed for real-time trace updates
 
-### Evolution Sidecar (`evolution/`)
+### Evolution Engine (`internal/evolution`)
 
-A standalone Python process (separate from the Go binary) that observes agent behavior and proposes configuration improvements.
+A built-in Go component (not a separate process) that observes agent behavior and proposes configuration improvements. It reads AGENT.md, EVOLVE.md, and PROMPT.md files to understand agent context and generate improvements.
 
-- Communicates with AgentWarden exclusively through the management API
-- Does not intercept traffic or modify proxy state directly
-- Uses Pydantic v2 models for type-safe data structures
-- Six-stage loop: score -> analyze -> propose -> shadow -> compare -> promote/reject
+- Runs within the main AgentWarden binary — no sidecar required
+- Uses the trace store directly for performance data (no API round-trips)
+- Uses LLM analysis (via any OpenAI-compatible API) for failure pattern identification and diff generation
+- Pipeline: analyze -> propose -> shadow -> compare -> promote/reject
+- Manages versioned PROMPT.md files for each agent
+- Controlled via CLI (`agentwarden evolve`) and REST API (`/api/evolution/*`)
 
 ---
 
@@ -289,7 +291,7 @@ After the upstream response is received:
 3. **Hash chain**: Fetch the previous trace hash, compute SHA-256 of (ID | SessionID | ActionType | RequestBody | ResponseBody | PrevHash)
 4. **Store trace**: Persist to SQLite with all fields
 5. **Update session**: Add cost, increment action count
-6. **Anomaly detection**: Feed the trace to loop, cost anomaly, and spiral detectors
+6. **Anomaly detection**: Feed the trace to all five detectors (loop, cost anomaly, spiral, drift, velocity)
 7. **WebSocket broadcast**: Push the trace to all connected dashboard clients
 
 The trace ID is returned to the caller in the `X-AgentWarden-Trace-Id` response header.
@@ -452,7 +454,7 @@ AgentWarden is designed for high-throughput concurrent operation:
 | **Alert Manager** | Deduplication map with mutex | 5-minute TTL prevents alert storms |
 | **WebSocket Hub** | Channel-based | Non-blocking broadcast to connected clients |
 
-All engines use a "fail open" strategy: if a policy evaluation encounters an error (e.g., CEL compilation failure), the action is allowed rather than blocked. This prevents configuration errors from causing outages.
+By default, all engines use a **"fail closed"** strategy: if a policy evaluation encounters an error (e.g., CEL compilation failure), the action is **denied** rather than allowed. This ensures security is maintained even when configuration errors occur. The behavior is configurable via `server.fail_mode` — set to `"open"` to allow actions on error if availability is more important than security for your use case.
 
 ---
 
@@ -544,20 +546,36 @@ The final binary embeds:
 
 ### CLI
 
-Built with Cobra, the binary provides these commands:
+Built with Cobra, the binary provides a comprehensive command tree:
 
 | Command | Description |
 |---------|-------------|
 | `start` | Start the proxy, API, and dashboard |
 | `init` | Generate a starter `agentwarden.yaml` |
-| `status` | Show running status and active sessions |
+| `init agent` | Scaffold AGENT.md + EVOLVE.md for an agent |
+| `init policy` | Scaffold a policy.yaml + POLICY.md |
+| `init playbook` | Scaffold a playbook from a template |
+| `status` | Show running status, active sessions, and violations |
 | `version` | Print version, commit, and build date |
-| `policy validate` | Validate policy CEL expressions |
+| `policy validate` | Validate config and check referenced POLICY.md files |
 | `policy reload` | Hot-reload policies from config file |
+| `policy list` | Show all loaded policies |
 | `trace list` | List recent traces |
-| `trace show` | Show a single trace by ID |
+| `trace show` | Show a full session trace |
 | `trace search` | Full-text search across traces |
 | `trace verify` | Verify hash chain integrity |
-| `agent list` | List registered agents |
-| `doctor` | Run diagnostic checks |
-| `mock` | Start with mock data for testing |
+| `agent list` | List all agents with stats |
+| `agent show` | Show AGENT.md, version, and metrics |
+| `agent stats` | Performance metrics for an agent |
+| `agent pause` | Block all actions for an agent (graceful) |
+| `agent resume` | Unblock a paused agent |
+| `agent kill` | Force-terminate an agent's session |
+| `evolve status` | Show active evolution loops and progress |
+| `evolve trigger` | Manually trigger evolution analysis |
+| `evolve history` | Show version timeline (PROMPT.md diffs) |
+| `evolve diff` | Show current vs proposed PROMPT.md diff |
+| `evolve promote` | Manually promote candidate to active |
+| `evolve rollback` | Revert to previous version |
+| `kill` | Emergency kill switch (`--all` for global, or specify agent/session ID) |
+| `doctor` | Run diagnostic checks (config, connectivity, storage) |
+| `mock` | Generate mock agent traffic for testing |

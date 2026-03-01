@@ -1,11 +1,14 @@
 # Self-Evolution Guide
 
-AgentWarden's evolution engine is a Python sidecar that observes agent behavior over time, identifies failure patterns, and proposes configuration improvements -- all validated through shadow testing before promotion.
+AgentWarden's evolution engine is a built-in Go component that observes agent behavior over time, identifies failure patterns, and proposes configuration improvements -- all validated through shadow testing before promotion.
 
 ## Table of Contents
 
 - [Overview](#overview)
 - [Architecture](#architecture)
+- [File Structure](#file-structure)
+- [CLI Commands](#cli-commands)
+- [API Endpoints](#api-endpoints)
 - [The Evolution Loop](#the-evolution-loop)
 - [Evolvable Components and Risk Levels](#evolvable-components-and-risk-levels)
 - [Scoring](#scoring)
@@ -13,7 +16,6 @@ AgentWarden's evolution engine is a Python sidecar that observes agent behavior 
 - [Shadow Runner](#shadow-runner)
 - [Auto-Rollback](#auto-rollback)
 - [Configuration Reference](#configuration-reference)
-- [Running the Sidecar](#running-the-sidecar)
 
 ---
 
@@ -36,37 +38,105 @@ The evolution engine runs this loop continuously, using LLM analysis to identify
 ## Architecture
 
 ```
-                     AgentWarden Proxy (:6777)
+                     AgentWarden Binary (:6777)
                             |
-                    Management API
-                     /api/sessions
-                     /api/traces
-                     /api/agents/:id/stats
-                     /api/agents/:id/versions
+                   +--------+--------+
+                   |        |        |
+                 Proxy   API/WS   Evolution
+                   |                 |
+                   |        +--------+--------+
+                   |        |        |        |
+                   |     Analyzer  Proposer  Shadow
+                   |      (LLM)    (diffs)   Runner
+                   |        |        |        |
+                   |        +--------+--------+
+                   |                 |
+                   +--------+--------+
                             |
-                  +---------+---------+
-                  |                   |
-            Evolution Sidecar    Dashboard
-            (Python process)     (React SPA)
-                  |
-         +--------+--------+
-         |        |        |
-      Scorer   Analyzer  Shadow
-               (LLM)     Runner
+                      Trace Store
+                       (SQLite)
 ```
 
-The evolution sidecar is a standalone Python process that communicates with AgentWarden exclusively through the management API. It does not intercept traffic or modify the proxy configuration directly.
+The evolution engine is built into the main AgentWarden binary. It accesses the trace store directly (no API round-trips) and uses any OpenAI-compatible LLM for analysis and diff generation.
 
 ### Components
 
 | Component | Role |
 |-----------|------|
-| **Scorer** | Computes composite scores for sessions and aggregates them per agent version |
-| **Analyzer** | Uses an LLM to identify failure patterns and propose improvements |
-| **Diff Generator** | Produces concrete configuration diffs from improvement proposals |
-| **Validator** | Checks diffs for syntax, semantic correctness, and risk level |
+| **Analyzer** | Uses an LLM to identify failure patterns from traces and propose improvements |
+| **Proposer** | Generates concrete PROMPT.md diffs from improvement proposals |
+| **Version Manager** | Tracks agent versions, manages PROMPT.md history |
 | **Shadow Runner** | Runs candidate configurations in parallel with the live version |
-| **Promoter** | Promotes validated candidates and handles rollback |
+| **MD Loader** | Reads AGENT.md, EVOLVE.md, and PROMPT.md files from the configured directories |
+
+---
+
+## File Structure
+
+The evolution engine works with markdown files stored in the configured `agents_dir` (default: `./agents/`):
+
+```
+agents/
+├── my-agent/
+│   ├── AGENT.md       # Agent identity and purpose
+│   ├── PROMPT.md      # Current system prompt (the evolvable artifact)
+│   └── EVOLVE.md      # Evolution constraints and rules
+```
+
+| File | Purpose |
+|------|---------|
+| `AGENT.md` | Describes the agent's role, capabilities, and context. Read by the analyzer to understand what the agent is supposed to do. |
+| `PROMPT.md` | The current system prompt. This is the primary artifact that evolution modifies. Versioned automatically. |
+| `EVOLVE.md` | Constraints for evolution: what can/cannot change, risk boundaries, required invariants. |
+
+### Scaffolding
+
+Generate starter files for a new agent:
+
+```bash
+agentwarden init agent --id my-agent
+```
+
+This creates the `agents/my-agent/` directory with template AGENT.md, PROMPT.md, and EVOLVE.md files.
+
+---
+
+## CLI Commands
+
+All evolution operations are available via the `evolve` command group:
+
+```bash
+# Check evolution status for all agents
+agentwarden evolve status
+
+# Manually trigger evolution analysis for a specific agent
+agentwarden evolve trigger --agent-id my-agent
+
+# View version history (PROMPT.md diffs over time)
+agentwarden evolve history --agent-id my-agent
+
+# Show diff between current and proposed PROMPT.md
+agentwarden evolve diff --agent-id my-agent
+
+# Manually promote a candidate version to active
+agentwarden evolve promote --agent-id my-agent
+
+# Revert to the previous version
+agentwarden evolve rollback --agent-id my-agent
+```
+
+---
+
+## API Endpoints
+
+The evolution engine exposes REST endpoints for programmatic control:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/evolution/status` | Get evolution status for all agents (active loops, candidates, shadow tests) |
+| `POST` | `/api/evolution/:agent_id/trigger` | Manually trigger evolution analysis |
+| `POST` | `/api/evolution/:agent_id/promote` | Promote candidate to active |
+| `POST` | `/api/evolution/:agent_id/rollback` | Revert to previous version |
 
 ---
 
@@ -319,66 +389,48 @@ evolution:
       cooldown: 30m
 ```
 
-### Evolution Sidecar Config (Python)
+### Environment Variables
 
-The sidecar is configured via `EvolutionConfig`:
+The evolution engine uses these environment variables for LLM access:
 
-| Field | Default | Description |
-|-------|---------|-------------|
-| `api_url` | `http://localhost:6777` | AgentWarden management API base URL |
-| `model` | `gpt-4o` | LLM model for analysis and diff generation |
-| `scoring_window` | `24h` | Time window for scoring |
-| `min_shadow_runs` | `10` | Minimum shadow runs before promotion |
-| `promotion_threshold` | `0.05` | Minimum improvement ratio for promotion |
-| `max_concurrent_shadows` | `1` | Max simultaneous shadow tests |
-| `poll_interval` | `5m` | How often the engine checks for new data |
-| `auto_approve_low_risk` | `true` | Auto-approve low-risk diffs passing shadow tests |
-| `min_sessions_for_analysis` | `5` | Minimum sessions needed before analyzing |
-| `max_diffs_per_cycle` | `3` | Maximum diffs proposed per cycle |
-| `openai_api_key` | `None` | API key (falls back to `OPENAI_API_KEY` env var) |
+| Variable | Description |
+|----------|-------------|
+| `AGENTWARDEN_LLM_BASE_URL` | Base URL for the OpenAI-compatible LLM API |
+| `AGENTWARDEN_LLM_API_KEY` | API key for the LLM API |
+
+The `model` field in the evolution config specifies which model to use (default: `gpt-4o`).
 
 ---
 
-## Running the Sidecar
+## Running Evolution
 
-### Install
+Evolution is built into AgentWarden -- no separate process to install or manage. Enable it in your config and it runs automatically:
 
-```bash
-cd evolution
-pip install -e ".[dev]"
+```yaml
+evolution:
+  enabled: true
+  model: gpt-4o
 ```
 
-### Run
+### Manual Trigger
 
 ```bash
-# Start with defaults (connects to localhost:6777)
-evolution run --agent-id my-agent
+# Trigger analysis for a specific agent
+agentwarden evolve trigger --agent-id my-agent
 
-# Custom config
-evolution run \
-  --agent-id my-agent \
-  --api-url http://agentwarden:6777 \
-  --model gpt-4o \
-  --poll-interval 300 \
-  --scoring-window 86400
+# Check the result
+agentwarden evolve status
 
-# One-shot analysis (no continuous loop)
-evolution analyze --agent-id my-agent
+# Review the proposed diff
+agentwarden evolve diff --agent-id my-agent
+
+# Promote if it looks good
+agentwarden evolve promote --agent-id my-agent
 ```
 
-### Docker
+### Docker Compose
 
-```bash
-docker run \
-  --network host \
-  -e OPENAI_API_KEY=$OPENAI_API_KEY \
-  ghcr.io/agentwarden/evolution:latest \
-  run --agent-id my-agent
-```
-
-### With Docker Compose
-
-Add the evolution sidecar to your `docker-compose.yml`:
+Evolution runs inside the main container -- no sidecar needed:
 
 ```yaml
 services:
@@ -386,15 +438,11 @@ services:
     image: ghcr.io/agentwarden/agentwarden
     ports:
       - "6777:6777"
+    environment:
+      - AGENTWARDEN_LLM_BASE_URL=https://api.openai.com/v1
+      - AGENTWARDEN_LLM_API_KEY=${OPENAI_API_KEY}
     volumes:
       - ./data:/data
+      - ./agents:/agents
       - ./agentwarden.yaml:/etc/agentwarden/config.yaml:ro
-
-  evolution:
-    image: ghcr.io/agentwarden/evolution
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-    command: run --agent-id my-agent --api-url http://agentwarden:6777
-    depends_on:
-      - agentwarden
 ```

@@ -14,6 +14,8 @@ AgentWarden exposes a REST management API and a WebSocket endpoint for real-time
 - [Policies](#policies)
 - [Approvals](#approvals)
 - [Violations](#violations)
+- [Evolution](#evolution)
+- [Trace Verification](#trace-verification)
 - [Kill Switch](#kill-switch)
 - [System](#system)
 - [WebSocket](#websocket)
@@ -22,7 +24,26 @@ AgentWarden exposes a REST management API and a WebSocket endpoint for real-time
 
 ## Authentication
 
-The management API does not require authentication by default. In production deployments, use network-level controls (firewall, VPN, Kubernetes NetworkPolicy) to restrict access to the `/api/` path.
+The management API does not require authentication by default. Enable it in the config:
+
+```yaml
+server:
+  auth:
+    enabled: true
+    token_ttl: 1h
+```
+
+When enabled, all `/api/*` endpoints (except `/api/health`) require an `Authorization: Bearer <token>` header.
+
+Three roles control access:
+
+| Role | Permissions |
+|------|------------|
+| `agent` | evaluate, trace, session.start, session.end |
+| `operator` | Agent role + manage agents, sessions, approvals |
+| `admin` | Full access including config changes and token creation |
+
+Tokens can be bound to a specific agent ID or source IP for additional security.
 
 ---
 
@@ -336,6 +357,42 @@ Returns aggregated statistics for an agent.
 }
 ```
 
+### Pause Agent
+
+```
+POST /api/agents/:id/pause
+```
+
+Blocks all actions for an agent. All active sessions for this agent are paused, and subsequent requests return 503.
+
+**Response:**
+
+```json
+{
+  "status": "paused",
+  "agent_id": "research-agent",
+  "sessions_paused": 3
+}
+```
+
+### Resume Agent
+
+```
+POST /api/agents/:id/resume
+```
+
+Unblocks a paused agent, allowing actions to proceed again.
+
+**Response:**
+
+```json
+{
+  "status": "resumed",
+  "agent_id": "research-agent",
+  "sessions_resumed": 3
+}
+```
+
 ### List Agent Versions
 
 ```
@@ -547,9 +604,109 @@ Returns policy violation records.
 
 ---
 
+## Evolution
+
+Endpoints for the self-evolution engine. These are only available when `evolution.enabled: true` in the config.
+
+### Get Evolution Status
+
+```
+GET /api/evolution/status
+```
+
+Returns evolution status for all agents.
+
+**Response:**
+
+```json
+{
+  "agents": [
+    {
+      "agent_id": "research-agent",
+      "current_version": "v2",
+      "candidate_version": "v3-candidate",
+      "shadow_progress": {
+        "current_runs": 7,
+        "min_runs": 20,
+        "ready_to_promote": false
+      },
+      "last_evolution": "2026-02-28T14:00:00Z"
+    }
+  ]
+}
+```
+
+### Trigger Evolution
+
+```
+POST /api/evolution/:agent_id/trigger
+```
+
+Manually triggers an evolution cycle for a specific agent.
+
+**Response:**
+
+```json
+{
+  "status": "triggered",
+  "agent_id": "research-agent"
+}
+```
+
+### Promote Candidate
+
+```
+POST /api/evolution/:agent_id/promote
+```
+
+Manually promotes the current candidate version to active, replacing the current version.
+
+### Rollback Version
+
+```
+POST /api/evolution/:agent_id/rollback
+```
+
+Reverts the agent to the previous version.
+
+---
+
+## Trace Verification
+
+### Verify Hash Chain
+
+```
+POST /api/traces/verify/:session_id
+```
+
+Verifies the SHA-256 hash chain integrity for all traces in a session. Returns the first broken link if tampering is detected.
+
+**Response (valid):**
+
+```json
+{
+  "valid": true,
+  "traces_checked": 15
+}
+```
+
+**Response (tampered):**
+
+```json
+{
+  "valid": false,
+  "broken_at_index": 7,
+  "trace_id": "01HQZX7ABC123DEF456",
+  "expected_hash": "a1b2c3...",
+  "actual_hash": "x9y8z7..."
+}
+```
+
+---
+
 ## Kill Switch
 
-Emergency stop mechanism that operates outside the LLM context window. See [OpenClaw Integration - Kill Switch](openclaw.md#kill-switch) for full details.
+Emergency stop mechanism that operates outside the LLM context window. Blocks all actions matching the specified scope immediately.
 
 ### Trigger Kill Switch
 
@@ -574,6 +731,7 @@ Activates the kill switch at the specified scope. All actions matching the scope
 | `scope` | string | Yes | Kill scope: `global`, `agent`, or `session` |
 | `target_id` | string | For agent/session | Agent ID or session ID to kill |
 | `reason` | string | Yes | Human-readable reason (recorded in audit trail) |
+| `source` | string | No | Source of the trigger: `api`, `cli`, `dashboard`, `slack`, `file` |
 
 **Response:**
 

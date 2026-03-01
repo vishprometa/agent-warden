@@ -87,24 +87,57 @@ AgentWarden searches for config files in this order:
 
 ## Server
 
-Controls the HTTP server that hosts the proxy, dashboard, and management API on a single port.
+Controls the HTTP and gRPC servers that host the proxy, dashboard, and management API.
 
 ```yaml
 server:
   port: 6777
+  grpc_port: 6778
   dashboard: true
   log_level: info
   cors: false
+  fail_mode: closed
+  auth:
+    enabled: false
+    token_ttl: 1h
 ```
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `port` | int | `6777` | TCP port for the combined proxy/dashboard/API server |
+| `grpc_port` | int | `6778` | TCP port for the gRPC event server |
 | `dashboard` | bool | `true` | Serve the embedded React monitoring dashboard at `/dashboard` |
 | `log_level` | string | `info` | Log verbosity. One of: `debug`, `info`, `warn`, `error` |
 | `cors` | bool | `false` | Enable CORS headers (Access-Control-Allow-Origin: *). Use for development only. |
+| `fail_mode` | string | `closed` | Behavior on policy evaluation errors. `closed` = deny on error (safe default), `open` = allow on error |
 
 The `--dev` flag on `agentwarden start` sets `cors: true` and `log_level: debug`.
+
+### Authentication
+
+API authentication is disabled by default. When enabled, all `/api/*` endpoints require a Bearer token.
+
+```yaml
+server:
+  auth:
+    enabled: true
+    token_ttl: 1h
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `auth.enabled` | bool | `false` | Enable token-based API authentication |
+| `auth.token_ttl` | duration | `1h` | Token expiration time. Expired tokens are automatically cleaned up. |
+
+Three roles are available:
+
+| Role | Permissions |
+|------|------------|
+| `agent` | `evaluate`, `trace`, `session.start`, `session.end` |
+| `operator` | Agent role + manage agents, sessions, approvals |
+| `admin` | Full access including `config.change`, `token.create` |
+
+When auth is enabled, pass the token as `Authorization: Bearer <token>` on all API requests. The `/api/health` endpoint does not require authentication.
 
 ---
 
@@ -165,8 +198,27 @@ storage:
 | `path` | string | `./agentwarden.db` | File path for the SQLite database |
 | `connection` | string | `""` | Connection string (reserved for future PostgreSQL support) |
 | `retention` | duration | `720h` (30 days) | How long to retain trace data. Traces older than this are pruned. |
+| `redaction` | list | `[]` | Redaction rules applied to stored trace data. See below. |
 
 The SQLite database stores six tables: `traces`, `sessions`, `agents`, `agent_versions`, `approvals`, and `violations`.
+
+### Redaction
+
+Automatically strip sensitive data from stored traces:
+
+```yaml
+storage:
+  redaction:
+    - pattern: "sk-[a-zA-Z0-9]+"
+      replacement: "[REDACTED]"
+      fields: ["request_body", "response_body"]
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `pattern` | string | Regex pattern to match |
+| `replacement` | string | Replacement text |
+| `fields` | list | Which trace fields to apply the rule to |
 
 ---
 
@@ -197,6 +249,7 @@ policies:
 | `delay` | duration | No | Delay duration for `throttle` effect (e.g., `5s`) |
 | `prompt` | string | No | LLM prompt for `ai-judge` type policies |
 | `model` | string | No | LLM model for `ai-judge` type policies |
+| `context` | string | No | Path to a POLICY.md file providing semantic context for `ai-judge` policies |
 | `approvers` | list[string] | No | Email addresses or identifiers for `approve` effect |
 | `timeout` | duration | No | Timeout for approval requests |
 | `timeout_effect` | string | No | Effect to apply when an approval times out (`deny` or `allow`) |
@@ -207,7 +260,7 @@ For detailed policy authoring guidance, see the [Policy Authoring Guide](policie
 
 ## Detection
 
-Configures the three anomaly detection subsystems that run on every intercepted action.
+Configures the five anomaly detection subsystems that run on every intercepted action.
 
 ```yaml
 detection:
@@ -216,6 +269,8 @@ detection:
     threshold: 5
     window: 60s
     action: pause
+    fallback_action: alert
+    playbook_model: gpt-4o-mini
   cost_anomaly:
     enabled: true
     multiplier: 10
@@ -225,7 +280,19 @@ detection:
     similarity_threshold: 0.9
     window: 5
     action: alert
+  velocity:
+    enabled: true
+    threshold: 10
+    sustained_seconds: 5
+    action: pause
+  drift:
+    enabled: false
+    threshold: 0.3
+    window: 5m
+    action: alert
 ```
+
+All detectors support an optional `playbook` action that loads a markdown playbook file and calls an LLM to decide the response. See [Playbook Actions](#playbook-actions) below.
 
 ### Loop Detection
 
@@ -236,7 +303,9 @@ Detects when the same action (same type + name + model) is repeated within a sli
 | `enabled` | bool | `true` | Enable loop detection |
 | `threshold` | int | `5` | Number of identical actions within the window to trigger detection |
 | `window` | duration | `60s` | Sliding time window for counting identical actions |
-| `action` | string | `pause` | Response when a loop is detected: `pause`, `alert`, `terminate` |
+| `action` | string | `pause` | Response: `pause`, `alert`, `terminate`, `playbook` |
+| `fallback_action` | string | `""` | Action to take if the primary action fails (e.g., playbook LLM call fails) |
+| `playbook_model` | string | `""` | LLM model for playbook-based responses |
 
 ### Cost Anomaly Detection
 
@@ -246,7 +315,9 @@ Detects when the cost-per-action rate spikes compared to a baseline established 
 |-------|------|---------|-------------|
 | `enabled` | bool | `true` | Enable cost anomaly detection |
 | `multiplier` | float | `10` | Fire when the recent cost rate exceeds the baseline rate by this factor |
-| `action` | string | `alert` | Response when an anomaly is detected: `pause`, `alert`, `terminate` |
+| `action` | string | `alert` | Response: `pause`, `alert`, `terminate`, `playbook` |
+| `fallback_action` | string | `""` | Fallback if primary action fails |
+| `playbook_model` | string | `""` | LLM model for playbook responses |
 
 The detector requires at least 3 data points before it can establish a baseline. It compares the average cost-per-action in the last 30 seconds against the average cost-per-action from earlier in the session.
 
@@ -259,7 +330,9 @@ Detects when an LLM produces highly similar consecutive outputs, indicating a no
 | `enabled` | bool | `true` | Enable spiral detection |
 | `similarity_threshold` | float | `0.9` | Cosine similarity threshold (0.0 to 1.0). Higher values require more similar outputs. |
 | `window` | int | `5` | Number of consecutive outputs to compare |
-| `action` | string | `alert` | Response when a spiral is detected: `pause`, `alert`, `terminate` |
+| `action` | string | `alert` | Response: `pause`, `alert`, `terminate`, `playbook` |
+| `fallback_action` | string | `""` | Fallback if primary action fails |
+| `playbook_model` | string | `""` | LLM model for playbook responses |
 
 ### Velocity Detection
 
@@ -270,7 +343,34 @@ Detects rapid-fire actions that suggest a runaway agent. Unlike loop detection (
 | `enabled` | bool | `true` | Enable velocity detection |
 | `threshold` | int | `10` | Actions-per-second threshold |
 | `sustained_seconds` | int | `5` | Velocity must exceed threshold for this many seconds |
-| `action` | string | `pause` | Response when velocity is breached: `pause`, `alert`, `terminate` |
+| `action` | string | `pause` | Response: `pause`, `alert`, `terminate` |
+
+### Drift Detection
+
+Detects behavioral shifts in agent action distributions using KL-divergence. Compares the current action type distribution against a learned baseline.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `false` | Enable drift detection (opt-in) |
+| `threshold` | float | `0.3` | KL-divergence threshold. Lower = more sensitive (0.1), higher = more lenient (0.5). |
+| `window` | duration | `5m` | Observation window for establishing the baseline distribution |
+| `action` | string | `alert` | Response: `pause`, `alert`, `terminate` |
+
+The drift detector builds a per-agent baseline of action type frequencies (e.g., 60% llm.chat, 30% tool.call, 10% file.write). When the current distribution diverges significantly from the baseline, it fires. Use `agentwarden evolve promote-baseline <agent-id>` to update the baseline after intentional changes.
+
+### Playbook Actions
+
+When a detector is configured with `action: playbook`, instead of a fixed response, AgentWarden loads a markdown playbook from the `playbooks_dir` directory and sends it to an LLM for a contextual decision.
+
+Playbook files are named after the detector: `playbooks/LOOP.md`, `playbooks/COST_ANOMALY.md`, `playbooks/SPIRAL.md`, `playbooks/DRIFT.md`.
+
+Scaffold a playbook:
+
+```bash
+agentwarden init playbook loop
+```
+
+If the LLM call fails, `fallback_action` is used instead.
 
 ---
 
@@ -399,9 +499,59 @@ Alert payload format:
 
 ---
 
+## Directory Structure
+
+AgentWarden uses three directories for agent definitions, policies, and playbooks:
+
+```yaml
+agents_dir: ./agents
+policies_dir: ./policies
+playbooks_dir: ./playbooks
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `agents_dir` | string | `./agents` | Directory containing agent definitions (AGENT.md, PROMPT.md, EVOLVE.md) |
+| `policies_dir` | string | `./policies` | Directory containing policy definitions (policy.yaml + POLICY.md per policy) |
+| `playbooks_dir` | string | `./playbooks` | Directory containing detection response playbooks (LOOP.md, COST_ANOMALY.md, etc.) |
+
+Expected structure:
+
+```
+agents/
+  my-agent/
+    AGENT.md              # Agent identity and constraints
+    EVOLVE.md             # Evolution rules and priorities
+    versions/
+      v1/PROMPT.md        # Version 1 system prompt
+      v2/PROMPT.md        # Version 2 system prompt
+      v3-candidate/PROMPT.md  # Candidate under shadow testing
+
+policies/
+  my-policy/
+    policy.yaml           # Policy config
+    POLICY.md             # Semantic context for AI judge
+
+playbooks/
+  LOOP.md                 # Response playbook for loop detection
+  COST_ANOMALY.md         # Response playbook for cost spikes
+  SPIRAL.md               # Response playbook for spiral detection
+  DRIFT.md                # Response playbook for drift detection
+```
+
+Scaffold these directories with:
+
+```bash
+agentwarden init agent my-agent
+agentwarden init policy my-policy
+agentwarden init playbook loop
+```
+
+---
+
 ## Evolution
 
-Configures the self-evolution engine, a separate Python sidecar that analyzes agent performance and proposes configuration improvements. Disabled by default.
+Configures the self-evolution engine that analyzes agent performance and proposes configuration improvements. The evolution engine runs within the Go binary and uses the management API internally. Disabled by default.
 
 ```yaml
 evolution:
@@ -437,6 +587,7 @@ evolution:
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `enabled` | bool | `false` | Enable the evolution engine |
+| `model` | string | `gpt-4o` | LLM model for analysis and diff generation (any OpenAI-compatible API) |
 
 ### Scoring
 
@@ -482,9 +633,14 @@ For the full evolution guide, see [Self-Evolution Guide](evolution.md).
 ```yaml
 server:
   port: 6777
+  grpc_port: 6778
   dashboard: true
   log_level: info
   cors: false
+  fail_mode: closed
+  auth:
+    enabled: false
+    token_ttl: 1h
 
 upstream:
   default: https://api.openai.com/v1
@@ -500,12 +656,25 @@ storage:
   driver: sqlite
   path: ./data/agentwarden.db
   retention: 720h
+  redaction:
+    - pattern: "sk-[a-zA-Z0-9]+"
+      replacement: "[REDACTED]"
+      fields: ["request_body"]
+
+agents_dir: ./agents
+policies_dir: ./policies
+playbooks_dir: ./playbooks
 
 policies:
   - name: session-budget
     condition: "session.cost > 10.00"
     effect: terminate
     message: "Session killed: exceeded $10 budget"
+
+  - name: daily-budget
+    condition: "agent.daily_cost > 100.0"
+    effect: deny
+    message: "Agent daily budget exceeded ($100)"
 
   - name: rate-limit
     condition: "session.action_count > 200"
@@ -518,12 +687,13 @@ policies:
     effect: deny
     message: "Shell execution is not allowed"
 
-  - name: block-prod-db-writes
-    condition: >
-      action.type == "db.query"
-      && action.target.contains("production")
+  - name: sql-safety-judge
+    type: ai-judge
+    prompt: "Evaluate whether this SQL query is safe for production."
+    model: gpt-4o-mini
+    context: ./policies/sql-safety/POLICY.md
     effect: deny
-    message: "Production database writes are blocked"
+    message: "AI judge determined this query is unsafe"
 
   - name: db-write-approval
     condition: 'action.type == "db.query"'
@@ -548,6 +718,16 @@ detection:
     similarity_threshold: 0.9
     window: 5
     action: alert
+  velocity:
+    enabled: true
+    threshold: 10
+    sustained_seconds: 5
+    action: pause
+  drift:
+    enabled: false
+    threshold: 0.3
+    window: 5m
+    action: alert
 
 alerts:
   slack:
@@ -559,4 +739,5 @@ alerts:
 
 evolution:
   enabled: false
+  model: gpt-4o
 ```

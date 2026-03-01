@@ -157,13 +157,15 @@ agentwarden kill --session session-id
 # Global kill
 curl -X POST http://localhost:6777/api/killswitch/trigger \
   -H "Content-Type: application/json" \
-  -d '{"scope": "global", "reason": "runaway agent"}'
+  -d '{"scope": "global", "reason": "runaway agent", "source": "api"}'
 
 # Agent-level kill
 curl -X POST http://localhost:6777/api/killswitch/trigger \
   -H "Content-Type: application/json" \
-  -d '{"scope": "agent", "target_id": "agent-1", "reason": "cost exceeded"}'
+  -d '{"scope": "agent", "target_id": "agent-1", "reason": "cost exceeded", "source": "api"}'
 ```
+
+The `source` field tracks how the kill switch was triggered. Valid values: `api`, `cli`, `dashboard`, `slack`, `file`.
 
 ### Trigger via file sentinel
 
@@ -400,7 +402,7 @@ policy_files:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/killswitch/trigger` | Trigger kill switch (body: `{"scope": "global\|agent\|session", "target_id": "...", "reason": "..."}`) |
+| `POST` | `/api/killswitch/trigger` | Trigger kill switch (body: `{"scope": "global\|agent\|session", "target_id": "...", "reason": "...", "source": "api\|cli\|dashboard\|slack\|file"}`) |
 | `GET` | `/api/killswitch/status` | Get current kill switch state |
 | `POST` | `/api/killswitch/reset` | Reset kill switch (body: `{"scope": "global\|agent\|session", "target_id": "..."}`) |
 
