@@ -1,0 +1,17 @@
+Date,Category,Task,Status,Notes
+2025-02-24,Architecture,Rewrote config.go for event-driven architecture (removed UpstreamConfig),Done,Removed proxy-era config; added GRPCPort/FailMode/AgentsDir/PoliciesDir/PlaybooksDir
+2025-02-24,Server,Built gRPC event server (internal/server/grpc.go),Done,5 RPCs: EvaluateAction/StartSession/EndSession/ScoreSession/StreamActions
+2025-02-24,Server,Built HTTP event server (internal/server/http_events.go),Done,5 endpoints mirroring gRPC; uses Go 1.22+ ServeMux patterns
+2025-02-24,Core,Built MD loader package (internal/mdloader/),Done,"4 files: loader.go, watcher.go, validator.go, templates.go"
+2025-02-24,Core,Built detection system (playbook executor + drift detector),Done,"playbook.go (LLM-driven), drift.go (KL-divergence)"
+2025-02-24,Core,Built AI judge policy evaluator,Done,ai_judge.go — sends action + POLICY.md context to LLM
+2025-02-24,Core,Built Go evolution engine (7 files),Done,"engine.go, analyzer.go, proposer.go, shadow.go, versions.go, llm.go, rollback.go"
+2025-02-24,CLI,Rewrote main.go for event-driven architecture,Done,"Fixed 7 compilation errors, wired all new components"
+2025-02-24,SDK,Rewrote TypeScript SDK (session-based),Done,"Session class, ActionDenied/ActionPendingApproval errors"
+2025-02-24,SDK,Rewrote Python SDK (session-based),Done,"Session, decorators, LangChain/CrewAI/OpenAI Agents integrations"
+2025-02-24,Dashboard,Added 3 new pages (PolicyEditor/SessionReplay/EvolutionHistory),Done,Built and dist copied to internal/dashboard/dist
+2025-02-24,Tests,Wrote 79 unit tests across 6 packages,Done,All passing
+2025-02-24,Infra,Created Helm chart (9 files),Done,deploy/helm/agentwarden/
+2025-02-24,Docs,Wrote 6 doc files,Done,"quickstart, configuration, policies, evolution, api-reference, architecture"
+2025-02-24,Cleanup,Removed old proxy package + Python evolution sidecar,Done,Deleted internal/proxy/ and evolution/
+2025-02-25,Cleanup,Removed all version label references from code,Done,Cleaned 11 files across Go/Python/TypeScript

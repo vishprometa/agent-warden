@@ -2,9 +2,9 @@
 layout: home
 
 hero:
-  name: AgentWarden
-  text: Every agent needs a warden
-  tagline: Kill switches, policy enforcement, cost tracking, and audit trails. One binary, zero code changes.
+  name: Governance Infra for Enterprise Agents
+  text: AgentWarden
+  tagline: Runtime governance for your agent infra. Kill switches, policy enforcement, cost tracking, and audit trails. One binary, zero code changes.
   actions:
     - theme: brand
       text: Get Started
@@ -46,23 +46,23 @@ features:
 
 ## How it works
 
-AgentWarden sits between your AI agents and the outside world as a transparent proxy. Every action is evaluated, traced, and governed.
+AgentWarden sits between your AI <span class="highlight">agents</span> and the outside world as a transparent <span class="highlight">governance</span> proxy. Every action is evaluated, traced, and governed — across your entire <span class="highlight">infra</span>.
 
 <div class="steps">
   <div class="step">
     <div class="step-num">01</div>
     <h4>Install & Start</h4>
-    <p>One binary, zero dependencies. Start the proxy and dashboard with a single command. Sensible defaults out of the box.</p>
+    <p>One binary, zero dependencies. Drop it into your <span class="highlight">infra</span> and start the proxy with a single command. Sensible defaults out of the box.</p>
   </div>
   <div class="step">
     <div class="step-num">02</div>
     <h4>Point Your Agent</h4>
-    <p>Set your LLM client's base URL to the AgentWarden proxy. No SDK required — works with any language or framework.</p>
+    <p>Set your <span class="highlight">agent's</span> base URL to the AgentWarden proxy. No SDK required — works with any language or framework.</p>
   </div>
   <div class="step">
     <div class="step-num">03</div>
     <h4>Govern & Observe</h4>
-    <p>Every request flows through the policy engine, anomaly detectors, and trace store. Kill runaway agents, enforce budgets, and audit everything.</p>
+    <p>Every request flows through the <span class="highlight">governance</span> engine, anomaly detectors, and trace store. Kill runaway <span class="highlight">agents</span>, enforce budgets, and audit everything.</p>
   </div>
 </div>
 </div>
@@ -84,9 +84,9 @@ Agent ──► AgentWarden ──► LLM API / Tools / APIs
 
 <div class="cta-section">
 
-## Ready to govern your agents?
+## Ready to govern your <span class="highlight">agents</span>?
 
-Stop worrying about runaway costs, prompt injection, and uncontrolled agent behavior. AgentWarden gives you the kill switch.
+Stop worrying about runaway costs, prompt injection, and uncontrolled <span class="highlight">agent</span> behavior. Full <span class="highlight">governance</span> for your <span class="highlight">infra</span> — AgentWarden gives you the kill switch.
 
 <div class="cta-buttons">
   <a href="/quickstart" class="cta-btn cta-primary">Get Started</a>

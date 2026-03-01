@@ -103,12 +103,33 @@
 }
 
 /* ---------- Hero section ---------- */
+
+/* Force center layout (no side-by-side) */
+.VPHero .container {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  text-align: center !important;
+  max-width: 5xl !important;
+  margin: 0 auto !important;
+}
+
+.VPHero .main {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  text-align: center !important;
+  max-width: 100% !important;
+  flex-shrink: 0 !important;
+}
+
 .VPHero .name {
   font-family: var(--aw-font-serif) !important;
   font-size: 3.5rem !important;
   font-weight: 400 !important;
   letter-spacing: -0.02em;
   line-height: 1.1 !important;
+  text-align: center !important;
 }
 
 @media (min-width: 640px) {
@@ -124,13 +145,16 @@
 }
 
 .VPHero .text {
-  font-family: var(--aw-font-sans) !important;
-  font-size: 1.15rem !important;
-  font-weight: 300 !important;
-  letter-spacing: -0.01em;
+  font-family: var(--aw-font-mono) !important;
+  font-size: 0.85rem !important;
+  font-weight: 400 !important;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   line-height: 1.6 !important;
   max-width: 560px;
-  color: var(--vp-c-text-2);
+  margin-left: auto !important;
+  margin-right: auto !important;
+  color: var(--vp-c-text-3);
 }
 
 .VPHero .tagline {
@@ -139,7 +163,13 @@
   font-weight: 400 !important;
   line-height: 1.7 !important;
   max-width: 480px;
+  margin-left: auto !important;
+  margin-right: auto !important;
   color: var(--vp-c-text-3);
+}
+
+.VPHero .actions {
+  justify-content: center !important;
 }
 
 /* Hero actions — erpai.studio style */
@@ -383,6 +413,12 @@
   transition-property: color, background-color, border-color, opacity;
   transition-duration: 0.15s;
   transition-timing-function: ease;
+}
+
+/* ---------- Highlighted keywords ---------- */
+.highlight {
+  color: var(--vp-c-brand-1);
+  font-weight: 500;
 }
 
 /* ---------- Home page content ---------- */

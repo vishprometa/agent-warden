@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "docs",
+      "runtimeExecutable": "/Users/vish/Developer/agentwarden/docs/node_modules/.bin/vitepress",
+      "runtimeArgs": ["dev", "/Users/vish/Developer/agentwarden/docs"],
+      "port": 5173
+    }
+  ]
+}
