@@ -5,12 +5,13 @@ import AiAgent from './components/AiAgent.vue'
 import ArchitectureDiagram from './components/ArchitectureDiagram.vue'
 import HeroPill from './components/HeroPill.vue'
 import FlickeringGrid from './components/FlickeringGrid.vue'
+import CustomFooter from './components/CustomFooter.vue'
 
 export default {
   extends: DefaultTheme,
   Layout() {
     return h(DefaultTheme.Layout, null, {
-      'layout-bottom': () => [h(AiAgent), h(FlickeringGrid)],
+      'layout-bottom': () => [h(CustomFooter), h(AiAgent), h(FlickeringGrid)],
       'home-hero-info-before': () => h(HeroPill),
       'home-features-before': () => h(ArchitectureDiagram),
     })

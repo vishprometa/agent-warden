@@ -68,11 +68,6 @@ export default withMermaid(defineConfig({
       { icon: 'github', link: 'https://github.com/vishprometa/agent-warden' },
     ],
 
-    footer: {
-      message: 'Released under the MIT License.',
-      copyright: 'Copyright \u00A9 2025-present AgentWarden',
-    },
-
     search: {
       provider: 'local',
     },

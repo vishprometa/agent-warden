@@ -40,7 +40,6 @@ features:
 ---
 
 <div class="home-content">
-
 <div class="how-it-works">
 
 ## How it works
@@ -65,17 +64,4 @@ AgentWarden sits between your AI <span class="highlight">agents</span> and the o
   </div>
 </div>
 </div>
-
-<div class="cta-section">
-
-## Ready to govern your <span class="highlight">agents</span>?
-
-Stop worrying about runaway costs, prompt injection, and uncontrolled <span class="highlight">agent</span> behavior. Full <span class="highlight">governance</span> for your <span class="highlight">infra</span> — AgentWarden gives you the kill switch.
-
-<div class="cta-buttons">
-  <a href="/quickstart" class="cta-btn cta-primary">Get Started</a>
-  <a href="/architecture" class="cta-btn cta-secondary">Architecture Deep Dive</a>
-</div>
-</div>
-
 </div>
