@@ -151,11 +151,10 @@ const links = [
 
 .footer-wordmark span {
   display: block;
-  font-family: var(--aw-font-sans);
-  font-weight: 800;
+  font-family: var(--aw-font-serif);
+  font-weight: 400;
   font-size: clamp(5rem, 15vw, 12rem);
-  letter-spacing: -0.04em;
-  text-transform: uppercase;
+  letter-spacing: -0.02em;
   background: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.12) 0%,
